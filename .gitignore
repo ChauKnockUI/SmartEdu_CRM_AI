@@ -1,0 +1,24 @@
+# Bộ nhớ đệm của Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Môi trường ảo (Virtual Environment)
+venv/
+env/
+.env
+
+# Lịch sử chạy và log
+*.log
+ai_models/output.log
+
+# Cấu hình IDE (VSCode, PyCharm)
+.vscode/
+.idea/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# Nếu sau này file Data phình to trên 100MB, bỏ comment 2 dòng dưới đây:
+# dataset/
+# *.pkl
