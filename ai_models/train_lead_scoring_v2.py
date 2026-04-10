@@ -44,10 +44,13 @@ from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import OneHotEncoder, StandardScaler, FunctionTransformer
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.calibration import CalibratedClassifierCV, calibration_curve
 from sklearn.metrics import (
     accuracy_score, classification_report, confusion_matrix,
-    f1_score, roc_auc_score, precision_score, recall_score
+    f1_score, roc_auc_score, precision_score, recall_score,
+    brier_score_loss
 )
+import matplotlib.pyplot as plt
 
 # Suppress warnings for cleaner output
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -155,39 +158,47 @@ def build_preprocessor() -> ColumnTransformer:
 # Model Builders
 # ---------------------------------------------------------------------------
 def build_rf_pipeline(preprocessor: ColumnTransformer) -> Pipeline:
-    """Build Random Forest pipeline."""
+    """Build Calibrated Random Forest pipeline."""
+    base_rf = RandomForestClassifier(
+        n_estimators=200,
+        max_depth=12,
+        min_samples_split=10,
+        min_samples_leaf=5,
+        class_weight="balanced",
+        random_state=42,
+        n_jobs=-1,
+    )
+    # Use Isotonic regression for RF to smooth out the steps
+    calibrated_rf = CalibratedClassifierCV(base_rf, method='isotonic', cv=5)
+
     return Pipeline(steps=[
         ("preprocessor", preprocessor),
-        ("classifier", RandomForestClassifier(
-            n_estimators=200,
-            max_depth=12,
-            min_samples_split=10,
-            min_samples_leaf=5,
-            class_weight="balanced",
-            random_state=42,
-            n_jobs=-1,
-        )),
+        ("classifier", calibrated_rf),
     ])
 
 
 def build_xgb_pipeline(preprocessor: ColumnTransformer) -> Pipeline:
-    """Build XGBoost pipeline."""
+    """Build Calibrated XGBoost pipeline."""
+    base_xgb = XGBClassifier(
+        n_estimators=200,
+        max_depth=6,
+        learning_rate=0.1,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        reg_alpha=0.1,
+        reg_lambda=1.0,
+        scale_pos_weight=1.7,      # ~= (1 - 0.375) / 0.375 for imbalance
+        eval_metric="logloss",
+        random_state=42,
+        use_label_encoder=False,
+        verbosity=0,
+    )
+    # Platt scaling (sigmoid) is usually best for gradient boosting trees
+    calibrated_xgb = CalibratedClassifierCV(base_xgb, method='sigmoid', cv=5)
+
     return Pipeline(steps=[
         ("preprocessor", preprocessor),
-        ("classifier", XGBClassifier(
-            n_estimators=200,
-            max_depth=6,
-            learning_rate=0.1,
-            subsample=0.8,
-            colsample_bytree=0.8,
-            reg_alpha=0.1,
-            reg_lambda=1.0,
-            scale_pos_weight=1.7,      # ~= (1 - 0.375) / 0.375 for imbalance
-            eval_metric="logloss",
-            random_state=42,
-            use_label_encoder=False,
-            verbosity=0,
-        )),
+        ("classifier", calibrated_xgb),
     ])
 
 
@@ -251,6 +262,7 @@ def evaluate_on_test_set(pipeline: Pipeline, X_test: pd.DataFrame, y_test: pd.Se
     roc       = roc_auc_score(y_test, y_proba)
     precision = precision_score(y_test, y_pred)
     recall    = recall_score(y_test, y_pred)
+    brier     = brier_score_loss(y_test, y_proba)
     cm        = confusion_matrix(y_test, y_pred)
 
     print(f"\n{'='*65}")
@@ -261,6 +273,7 @@ def evaluate_on_test_set(pipeline: Pipeline, X_test: pd.DataFrame, y_test: pd.Se
     print(f"  ROC-AUC   : {roc:.4f}")
     print(f"  Precision : {precision:.4f}")
     print(f"  Recall    : {recall:.4f}")
+    print(f"  Brier Loss: {brier:.4f} (Lower is better)")
 
     print(f"\n  Confusion Matrix:")
     print(f"    TP={cm[1][1]:4d}  FP={cm[0][1]:4d}")
@@ -275,6 +288,8 @@ def evaluate_on_test_set(pipeline: Pipeline, X_test: pd.DataFrame, y_test: pd.Se
         "roc_auc": roc,
         "precision": precision,
         "recall": recall,
+        "brier_score": brier,
+        "y_proba": y_proba,
         "confusion_matrix": cm,
     }
 
@@ -287,6 +302,13 @@ def analyze_feature_importance(pipeline: Pipeline, model_name: str) -> None:
     classifier = pipeline.named_steps["classifier"]
     preprocessor = pipeline.named_steps["preprocessor"]
 
+    # If wrapped in CalibratedClassifierCV, get the base estimators
+    if hasattr(classifier, "calibrated_classifiers_"):
+        # Just grab the first calibrated fold for feature importance estimation
+        base_estimator = classifier.calibrated_classifiers_[0].estimator
+    else:
+        base_estimator = classifier
+
     # Get feature names after preprocessing
     try:
         feature_names = preprocessor.get_feature_names_out()
@@ -295,8 +317,8 @@ def analyze_feature_importance(pipeline: Pipeline, model_name: str) -> None:
         return
 
     # Get importances
-    if hasattr(classifier, "feature_importances_"):
-        importances = classifier.feature_importances_
+    if hasattr(base_estimator, "feature_importances_"):
+        importances = base_estimator.feature_importances_
     else:
         print(f"  [SKIP] {model_name} does not support feature_importances_")
         return
@@ -471,12 +493,37 @@ def main():
     print(f"\n{'='*65}")
     print(f"  FINAL COMPARISON — Test Set Results")
     print(f"{'='*65}")
-    print(f"\n  {'Model':<18} {'Accuracy':>10} {'F1':>10} {'ROC-AUC':>10} {'Precision':>10} {'Recall':>10}")
-    print(f"  {'-'*70}")
+    print(f"\n  {'Model':<18} {'Accuracy':>10} {'F1':>10} {'ROC-AUC':>10} {'BrierLoss':>10}")
+    print(f"  {'-'*65}")
     for name, data in results.items():
         t = data["test"]
         print(f"  {name:<18} {t['accuracy']:>10.2%} {t['f1']:>10.4f} {t['roc_auc']:>10.4f} "
-              f"{t['precision']:>10.4f} {t['recall']:>10.4f}")
+              f"{t['brier_score']:>10.4f}")
+
+    # Plot Calibration Curve
+    plot_path = os.path.join(MODEL_DIR, "calibration_reliability_curve.png")
+    plt.figure(figsize=(10, 10))
+    ax1 = plt.subplot2grid((3, 1), (0, 0), rowspan=2)
+    ax2 = plt.subplot2grid((3, 1), (2, 0))
+
+    ax1.plot([0, 1], [0, 1], "k:", label="Perfectly calibrated")
+    for name, data in results.items():
+        probas = data["test"]["y_proba"]
+        fraction_of_positives, mean_predicted_value = calibration_curve(y_test, probas, n_bins=10)
+        ax1.plot(mean_predicted_value, fraction_of_positives, "s-", label=f"{name}")
+        ax2.hist(probas, range=(0, 1), bins=10, label=name, histtype="step", lw=2)
+
+    ax1.set_ylabel("Fraction of positives")
+    ax1.set_ylim([-0.05, 1.05])
+    ax1.legend(loc="lower right")
+    ax1.set_title("Calibration Plots (Reliability Curve)")
+
+    ax2.set_xlabel("Mean predicted value")
+    ax2.set_ylabel("Count")
+    ax2.legend(loc="upper center", ncol=2)
+    plt.tight_layout()
+    plt.savefig(plot_path)
+    print(f"\n  [INFO] Calibration Curve plotted to: {plot_path}")
 
     # Winner
     if len(results) > 1:
