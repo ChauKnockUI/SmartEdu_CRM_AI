@@ -6,7 +6,8 @@ SmartEdu CRM — AI Prediction Microservice
 Exposes three REST API endpoints powered by trained sklearn pipelines:
 
     GET  /                  — Health check, lists available endpoints
-    POST /predict-lead      — Lead conversion probability (sales use case)
+    POST /predict-lead      — Lead conversion probability v1 (Kaggle features)
+    POST /predict-lead-v2   — Lead conversion probability v2 (CRM features)
     POST /predict-dropout   — Student dropout risk (early warning system)
 
 Models are loaded once at server startup and reused across all requests.
@@ -21,12 +22,24 @@ Interactive docs:
 """
 
 import os
+import sys
 import logging
 import joblib
 import pandas as pd
 from typing import Optional
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
+
+# Make ai_models importable so joblib can unpickle v2 model pipelines
+# (they reference preprocessing_utils.log_transform_days)
+_ai_models_dir = os.path.join(os.path.dirname(__file__), "ai_models")
+if _ai_models_dir not in sys.path:
+    sys.path.insert(0, _ai_models_dir)
+try:
+    from preprocessing_utils import log_transform_days  # noqa: F401
+except ImportError:
+    pass  # Model v2 won't load, but v1 and dropout will still work
+
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -48,7 +61,7 @@ app = FastAPI(
         "- **Lead Scoring** — predicts likelihood of a lead converting to a paying student\n"
         "- **Dropout Risk** — early warning system detecting students at risk of dropping out"
     ),
-    version = "2.0.0",
+    version = "3.0.0",
 )
 
 # ---------------------------------------------------------------------------
@@ -56,8 +69,9 @@ app = FastAPI(
 # Populated once at startup; all prediction handlers read from here.
 # ---------------------------------------------------------------------------
 _models: dict = {
-    "lead_scoring" : None,
-    "dropout_risk" : None,
+    "lead_scoring"    : None,
+    "lead_scoring_v2" : None,   # v2 model (CRM business features)
+    "dropout_risk"    : None,
 }
 
 
@@ -76,6 +90,19 @@ def _load_models() -> None:
         logger.info("Lead Scoring model loaded.")
     else:
         logger.warning(f"Lead Scoring model not found: {lead_path}")
+
+    # Lead Scoring v2 model (CRM business-aligned features)
+    # Tries XGBoost first (better performance), falls back to Random Forest
+    lead_v2_xgb_path = os.path.join(base, "ai_models", "lead_scoring_v2_xgb_pipeline.pkl")
+    lead_v2_rf_path  = os.path.join(base, "ai_models", "lead_scoring_v2_rf_pipeline.pkl")
+    if os.path.exists(lead_v2_xgb_path):
+        _models["lead_scoring_v2"] = joblib.load(lead_v2_xgb_path)
+        logger.info("Lead Scoring v2 (XGBoost) model loaded.")
+    elif os.path.exists(lead_v2_rf_path):
+        _models["lead_scoring_v2"] = joblib.load(lead_v2_rf_path)
+        logger.info("Lead Scoring v2 (Random Forest) model loaded.")
+    else:
+        logger.warning("Lead Scoring v2 model not found.")
 
     # Dropout Risk model
     # Mô hình cảnh báo sớm học viên dựa trên chuyên cần và bài tập
@@ -105,6 +132,37 @@ class LeadFeatures(BaseModel):
     Specialization : str   = Field(..., example="Finance Management")
     TotalVisits    : float = Field(..., example=3)
     Page_Views     : float = Field(..., example=2.5, description="Average page views per visit")
+
+class LeadFeaturesV2(BaseModel):
+    """
+    Input features for Lead Scoring v2 prediction.
+
+    Designed around CRM business logic — all features are either captured at
+    lead intake or automatically computed by the CRM backend.
+
+    Bối cảnh nghiệp vụ:
+    - Lead_Source             : Kênh marketing dẫn khách đến
+    - Occupation              : Phân khúc đối tượng (gộp cả năm học SV)
+    - Study_Purpose           : Mục tiêu / động lực học tập
+    - Course_Interested       : Sản phẩm (khóa học) quan tâm
+    - Call_Attempt_Count      : Số lần Sales đã liên hệ (auto từ CRM)
+    - Last_Engagement_Status  : Kết quả tương tác gần nhất (auto từ CRM)
+    - Days_Since_Created      : Số ngày từ lúc tạo lead (auto tính)
+    """
+    Lead_Source            : str   = Field(..., example="google_ads",
+                                           description="Marketing channel: facebook, google_ads, website_organic, referral, tiktok, other")
+    Occupation             : str   = Field(..., example="student_y3_y4",
+                                           description="Customer segment: student_y1_y2, student_y3_y4, working_professional, unemployed, parent_enrolling")
+    Study_Purpose          : str   = Field(..., example="study_abroad",
+                                           description="Learning goal: pass_exam, study_abroad, career_advancement, hobby, company_training")
+    Course_Interested      : str   = Field(..., example="ielts",
+                                           description="Target course: communication_english, ielts, toeic, frontend, backend_nodejs, data_analysis, kids_english")
+    Call_Attempt_Count     : int   = Field(..., ge=0, example=2,
+                                           description="Number of contact attempts by Sales (auto-tracked by CRM)")
+    Last_Engagement_Status : str   = Field(..., example="positive_interaction",
+                                           description="Latest interaction result: not_answering, busy_call_back, interested_need_time, positive_interaction, wrong_number, rejected")
+    Days_Since_Created     : int   = Field(..., ge=0, example=3,
+                                           description="Days since lead was created in CRM (auto-computed)")
 
 
 class DropoutFeatures(BaseModel):
@@ -142,17 +200,18 @@ def health_check():
     """
     return {
         "service" : "SmartEdu_CRM_AI_Service",
-        "version" : "2.0.0",
+        "version" : "3.0.0",
         "status"  : "healthy",
         "models_loaded": {k: (v is not None) for k, v in _models.items()},
         "endpoints": [
-            {"path": "/predict-lead",    "method": "POST", "description": "Lead conversion scoring"},
+            {"path": "/predict-lead",    "method": "POST", "description": "Lead scoring v1 (Kaggle features)"},
+            {"path": "/predict-lead-v2", "method": "POST", "description": "Lead scoring v2 (CRM business features)"},
             {"path": "/predict-dropout", "method": "POST", "description": "Student dropout early warning"},
         ],
     }
 
 
-@app.post("/predict-lead", tags=["Lead Scoring"])
+@app.post("/predict-lead", tags=["Lead Scoring v1"])
 def predict_lead(features: LeadFeatures):
     """
     Predict the probability that a prospective student (lead) will convert
@@ -199,6 +258,63 @@ def predict_lead(features: LeadFeatures):
 
     except Exception as e:
         logger.error(f"Lead scoring prediction error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/predict-lead-v2", tags=["Lead Scoring v2"])
+def predict_lead_v2(features: LeadFeaturesV2):
+    """
+    **Lead Scoring v2** — Predict conversion probability using CRM business features.
+
+    This endpoint uses the new 7-feature model designed around actual CRM workflow:
+    - 4 features from lead intake form (Lead_Source, Occupation, Study_Purpose, Course)
+    - 3 features auto-computed by CRM (Call_Attempt_Count, Last_Engagement, Days_Since_Created)
+
+    Returns a probability score and a sales action label:
+    - **HOT_LEAD**  (>= 80%) — high priority, follow up immediately
+    - **WARM_LEAD** (>= 50%) — moderate interest, nurture with content
+    - **COLD_LEAD** (<  50%) — low intent, low-touch outreach only
+    """
+    if _models["lead_scoring_v2"] is None:
+        raise HTTPException(
+            status_code = 503,
+            detail      = "Lead Scoring v2 model is not loaded. Run train_lead_scoring_v2.py first.",
+        )
+
+    try:
+        input_df = pd.DataFrame([{
+            "Lead_Source"            : features.Lead_Source,
+            "Occupation"             : features.Occupation,
+            "Study_Purpose"          : features.Study_Purpose,
+            "Course_Interested"      : features.Course_Interested,
+            "Call_Attempt_Count"     : features.Call_Attempt_Count,
+            "Last_Engagement_Status" : features.Last_Engagement_Status,
+            "Days_Since_Created"     : features.Days_Since_Created,
+        }])
+
+        prediction  = int(_models["lead_scoring_v2"].predict(input_df)[0])
+        probability = float(_models["lead_scoring_v2"].predict_proba(input_df)[0][1])
+
+        if probability >= 0.8:
+            label  = "HOT_LEAD"
+            action = "High priority — follow up within 1 hour. Prepare pricing & schedule."
+        elif probability >= 0.5:
+            label  = "WARM_LEAD"
+            action = "Moderate interest — send course brochure, schedule a callback."
+        else:
+            label  = "COLD_LEAD"
+            action = "Low intent — add to nurture email sequence, revisit in 7 days."
+
+        return {
+            "model_version"    : "v2",
+            "prediction"       : "Converted" if prediction == 1 else "Not Converted",
+            "probability_score": round(probability * 100, 2),
+            "recommendation"   : label,
+            "action"           : action,
+        }
+
+    except Exception as e:
+        logger.error(f"Lead scoring v2 prediction error: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 
