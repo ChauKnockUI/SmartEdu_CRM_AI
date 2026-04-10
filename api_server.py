@@ -30,6 +30,14 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
+# Thêm logic Explainable AI
+try:
+    from ai_models.explain_lead_scoring import get_lead_explanation_json
+    HAS_EXPLAINER = True
+except ImportError:
+    HAS_EXPLAINER = False
+
+
 # Make ai_models importable so joblib can unpickle v2 model pipelines
 # (they reference preprocessing_utils.log_transform_days)
 _ai_models_dir = os.path.join(os.path.dirname(__file__), "ai_models")
@@ -316,6 +324,41 @@ def predict_lead_v2(features: LeadFeaturesV2):
     except Exception as e:
         logger.error(f"Lead scoring v2 prediction error: {e}")
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/explain-lead-v2", tags=["Lead Scoring v2"])
+def explain_lead_v2(features: LeadFeaturesV2):
+    """
+    Predict AND EXPLAIN the probability that a lead will convert into a paying student.
+    
+    Returns the classification, probability score, and an NLP-friendly
+    SHAP explanation breaking down EXACTLY why the AI made this decision.
+    Specifically designed to be rendered directly onto the CRM interface for Sales Teams.
+    """
+    if _models["lead_scoring_v2"] is None:
+        raise HTTPException(
+            status_code = 503,
+            detail      = "Lead Scoring v2 model is not loaded. Run train_lead_scoring_v2.py first.",
+        )
+        
+    if not HAS_EXPLAINER:
+        raise HTTPException(
+            status_code = 503,
+            detail      = "Explainable AI module not loaded. Missing dependencies like 'shap'.",
+        )
+
+    try:
+        # Convert schema to dict matching training data columns
+        input_dict = features.dict()
+        
+        # Gọi hàm Explain từ ai_models
+        response_json = get_lead_explanation_json(_models["lead_scoring_v2"], input_dict)
+        return response_json
+
+    except Exception as e:
+        logger.error(f"Lead scoring v2 explanation error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
 
 
 @app.post("/predict-dropout", tags=["Early Warning"])
