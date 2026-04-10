@@ -48,7 +48,7 @@ from sklearn.calibration import CalibratedClassifierCV, calibration_curve
 from sklearn.metrics import (
     accuracy_score, classification_report, confusion_matrix,
     f1_score, roc_auc_score, precision_score, recall_score,
-    brier_score_loss
+    brier_score_loss, precision_recall_curve
 )
 import matplotlib.pyplot as plt
 
@@ -529,6 +529,41 @@ def main():
     if len(results) > 1:
         best_model = max(results.items(), key=lambda x: x[1]["test"]["roc_auc"])
         print(f"\n  [WINNER] Best Model (by ROC-AUC): {best_model[0]}")
+
+    # ===================== THRESHOLD ANALYSIS & PR CURVE =====================
+    print(f"\n{'='*65}")
+    print(f"  THRESHOLD OPTIMIZATION (Maximize Recall)")
+    print(f"{'='*65}")
+    
+    # Plot Precision-Recall Curve
+    pr_plot_path = os.path.join(MODEL_DIR, "precision_recall_curve.png")
+    plt.figure(figsize=(8, 6))
+    
+    for name, data in results.items():
+        y_proba = data["test"]["y_proba"]
+        precision, recall, thresholds = precision_recall_curve(y_test, y_proba)
+        plt.plot(recall, precision, lw=2, label=f"{name}")
+        
+        # Analyze discrete thresholds for this model
+        print(f"\n  Model: {name}")
+        print(f"  {'Threshold':<12} {'Precision':>10} {'Recall':>10} {'F1-Score':>10}")
+        print(f"  {'-'*50}")
+        for t in [0.2, 0.3, 0.4, 0.5, 0.6]:
+            y_pred_t = (y_proba >= t).astype(int)
+            p = precision_score(y_test, y_pred_t, zero_division=0)
+            r = recall_score(y_test, y_pred_t, zero_division=0)
+            f1 = f1_score(y_test, y_pred_t, zero_division=0)
+            mark = "  <-- MẶC ĐỊNH" if t == 0.5 else ""
+            print(f"  {t:<12.2f} {p:>10.4f} {r:>10.4f} {f1:>10.4f}{mark}")
+            
+    plt.xlabel("Recall (Tỷ lệ bắt được KH tiềm năng)")
+    plt.ylabel("Precision (Độ chính xác khi dự đoán Chốt)")
+    plt.title("Precision-Recall Curve")
+    plt.legend(loc="lower left")
+    plt.grid(True, linestyle="--", alpha=0.7)
+    plt.tight_layout()
+    plt.savefig(pr_plot_path)
+    print(f"\n  [INFO] Precision-Recall Curve plotted to: {pr_plot_path}")
 
     print(f"\n{'='*65}")
     print(f"  Training pipeline complete. Models ready for deployment.")
