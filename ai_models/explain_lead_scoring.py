@@ -9,6 +9,7 @@ if sys.stdout.encoding.lower() != 'utf-8':
 
 MODEL_DIR = os.path.dirname(os.path.abspath(__file__))
 
+
 # -------------------------------------------------------------------------
 # 1. Mapping Features to Vietnamese for the Sales Team
 # -------------------------------------------------------------------------
@@ -68,6 +69,26 @@ def translate_feature_name(raw_feat):
         return FEATURE_TRANSLATION.get(base_name, base_name)
     return raw_feat
 
+import re
+def _safe_float(v):
+    """Safely convert SHAP values (which might be arrays, strings, or weird scalars) to float."""
+    try:
+        if isinstance(v, (list, np.ndarray, pd.Series)):
+            # Flatten recursively in case of nested arrays to get the first real value
+            v = np.array(v).ravel()
+            if len(v) > 0:
+                v = v[0]
+            else:
+                return 0.0
+        
+        v_str = str(v)
+        v_str = re.sub(r'[^\d\.\-eE]', '', v_str)
+        if not v_str or v_str == '-' or v_str == '.':
+            return 0.0
+        return float(v_str)
+    except Exception:
+        return 0.0
+
 # -------------------------------------------------------------------------
 # 2. Extract SHAP Logic for a Given Lead
 # -------------------------------------------------------------------------
@@ -98,37 +119,41 @@ def explain_lead_for_sales(pipeline, lead_df: pd.DataFrame, index: int = 0):
         elif name == "num":
             feature_names.extend([f"num__{f}" for f in cols])
     
-    # 3. Chạy SHAP TreeExplainer
-    explainer = shap.TreeExplainer(base_model)
-    # SHAP cho Random Forest trả về list (một list cho mỗi class). Class 1 (Converted) là index 1.
-    shap_vals_raw = explainer.shap_values(X_transformed)
-    if isinstance(shap_vals_raw, list):
-        shap_values = shap_vals_raw[1][0]
-    else:
-        shap_values = shap_vals_raw[0]
-    
-    shap_values = np.array(shap_values).flatten()
-    
-    # Safety check: ensure shap_values align with probability for Class 1
-    if (probability >= 0.5 and np.sum(shap_values) < 0) or (probability < 0.5 and np.sum(shap_values) > 0):
-        shap_values = -shap_values
-
-    # 4. Gộp thành từ điển Feature -> Lực tác động (Impact)
+    # 3. Chạy SHAP TreeExplainer với Fallback An Toàn (Graceful Degradation)
     impacts = []
-    for i, f_name in enumerate(feature_names):
-        val = shap_values[i]
-        if isinstance(val, (np.ndarray, list)):
-            val = val[0] if len(val) > 0 else 0.0
+    try:
+        explainer = shap.TreeExplainer(base_model)
+        shap_vals_raw = explainer.shap_values(X_transformed)
+        if isinstance(shap_vals_raw, list):
+            shap_values = shap_vals_raw[1][0]
+        else:
+            shap_values = shap_vals_raw[0]
             
-        if abs(val) > 0.03: # Bỏ qua các feature quá nhỏ
-            impacts.append({
-                "feature": f_name,
-                "shap_val": val,
-                "magnitude": abs(val)
-            })
-            
-    # Sort by magnitude (mức độ ảnh hưởng)
-    impacts = sorted(impacts, key=lambda x: x["magnitude"], reverse=True)
+        shap_values = np.array(shap_values).flatten()
+        X_array = X_transformed.toarray()[0] if hasattr(X_transformed, "toarray") else np.array(X_transformed).flatten()
+
+        for i, f_name in enumerate(feature_names):
+            if i < len(shap_values):
+                val = _safe_float(shap_values[i])
+            else:
+                val = 0.0
+                
+            # Filter out inactive One-Hot Encoded features (value is 0) to avoid confusing Sales team
+            if f_name.startswith("cat__") and i < len(X_array):
+                if X_array[i] == 0:
+                    continue
+                    
+            if abs(val) > 0.01: 
+                impacts.append({
+                    "feature": f_name,
+                    "shap_val": val,
+                    "magnitude": abs(val)
+                })
+                
+        impacts = sorted(impacts, key=lambda x: x["magnitude"], reverse=True)
+    except Exception as e:
+        print(f"[Cảnh Báo] SHAP Explanation thất bại do xung đột Version. Lỗi: {e}")
+        # Explain fail nhưng vẫn tiếp tục luồng code cho Predict
     
     # 5. Dịch ra văn bản cho Sale
     if probability >= 0.3:
@@ -180,8 +205,9 @@ def get_lead_explanation_json(pipeline, lead_dict: dict) -> dict:
     Generate JSON-serializable explanation using SHAP values for a single lead dict.
     Returns: dict suitable for API response.
     """
+    
     lead_df = pd.DataFrame([lead_dict])
-    probability = float(pipeline.predict_proba(lead_df)[0][1])
+    probability = _safe_float(pipeline.predict_proba(lead_df)[0][1])
     
     preprocessor = pipeline.named_steps["preprocessor"]
     calibrated_clf = pipeline.named_steps["classifier"]
@@ -198,32 +224,45 @@ def get_lead_explanation_json(pipeline, lead_dict: dict) -> dict:
         elif name == "num":
             feature_names.extend([f"num__{f}" for f in cols])
             
-    explainer = shap.TreeExplainer(base_model)
-    shap_vals_raw = explainer.shap_values(X_transformed)
-    if isinstance(shap_vals_raw, list):
-        shap_values = shap_vals_raw[1][0]
-    else:
-        shap_values = shap_vals_raw[0]
-    
-    shap_values = np.array(shap_values).flatten()
-    
-    if (probability >= 0.5 and np.sum(shap_values) < 0) or (probability < 0.5 and np.sum(shap_values) > 0):
-        shap_values = -shap_values
-        
     impacts = []
-    for i, f_name in enumerate(feature_names):
-        val = shap_values[i]
-        if isinstance(val, (np.ndarray, list)):
-            val = val[0] if len(val) > 0 else 0.0
+    # Khối giải thích SHAP cực kỳ cần tính an toàn tuyệt đối
+    # Nếu Explain lỗi thì Predict vẫn phải trả về được cho Hệ thống
+    try:
+        explainer = shap.TreeExplainer(base_model)
+        shap_vals_raw = explainer.shap_values(X_transformed)
+        if isinstance(shap_vals_raw, list):
+            shap_values = shap_vals_raw[1][0]
+        else:
+            shap_values = shap_vals_raw[0]
+        
+        shap_values = np.array(shap_values).flatten()
+        X_array = X_transformed.toarray()[0] if hasattr(X_transformed, "toarray") else np.array(X_transformed).flatten()
             
-        if abs(val) > 0.03: 
-            impacts.append({
-                "feature": f_name,
-                "shap_val": float(val),
-                "magnitude": abs(float(val))
-            })
-            
-    impacts = sorted(impacts, key=lambda x: x["magnitude"], reverse=True)
+        for i, f_name in enumerate(feature_names):
+            if i < len(shap_values):
+                val = _safe_float(shap_values[i])
+            else:
+                val = 0.0
+                
+            # Filter out inactive One-Hot Encoded features
+            if f_name.startswith("cat__") and i < len(X_array):
+                if X_array[i] == 0:
+                    continue
+                    
+            if abs(val) > 0.01: 
+                impacts.append({
+                    "feature": f_name,
+                    "shap_val": val,
+                    "magnitude": abs(val)
+                })
+                
+        impacts = sorted(impacts, key=lambda x: x["magnitude"], reverse=True)
+    except Exception as e:
+        import traceback
+        import logging
+        logging.error(f"[SHAP Fallback] Không thể tính toán SHAP Explanation: {e}")
+        traceback.print_exc()
+        # impacts rỗng -> frontend k hiển thị chart nhưng điểm xác suất vẫn OK
     
     if probability >= 0.3:
         status = "HOT_LEAD"
@@ -234,13 +273,19 @@ def get_lead_explanation_json(pipeline, lead_dict: dict) -> dict:
         
     positive_factors = []
     negative_factors = []
-    
-    for imp in impacts:
-        readable = translate_feature_name(imp["feature"])
-        if imp["shap_val"] > 0:
-            positive_factors.append(readable)
-        else:
-            negative_factors.append(readable)
+        
+    # Nếu tính toán thành công impacts
+    if len(impacts) > 0:
+        for imp in impacts:
+            readable = translate_feature_name(imp["feature"])
+            if imp["shap_val"] > 0:
+                positive_factors.append(readable)
+            else:
+                negative_factors.append(readable)
+    else:
+        # SHAP Fail fallback logic -> Hiển thị cảnh báo hoặc để mảng rỗng
+        positive_factors.append("⚠️ Chưa thể truy xuất lý do điểm cộng (Lỗi Module SHAP Server)")
+        negative_factors.append("⚠️ Vui lòng Fix version XGBoost / Sklearn để giải thích được hoạt động.")
             
     return {
         "prediction": "Converted" if status == "HOT_LEAD" else "Not Converted",

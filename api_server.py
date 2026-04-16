@@ -100,15 +100,15 @@ def _load_models() -> None:
         logger.warning(f"Lead Scoring model not found: {lead_path}")
 
     # Lead Scoring v2 model (CRM business-aligned features)
-    # Tries XGBoost first (better performance), falls back to Random Forest
+    # Tries Random Forest first (supported by SHAP without JSON parsing bug), falls back to XGBoost
     lead_v2_xgb_path = os.path.join(base, "ai_models", "lead_scoring_v2_xgb_pipeline.pkl")
     lead_v2_rf_path  = os.path.join(base, "ai_models", "lead_scoring_v2_rf_pipeline.pkl")
-    if os.path.exists(lead_v2_xgb_path):
-        _models["lead_scoring_v2"] = joblib.load(lead_v2_xgb_path)
-        logger.info("Lead Scoring v2 (XGBoost) model loaded.")
-    elif os.path.exists(lead_v2_rf_path):
+    if os.path.exists(lead_v2_rf_path):
         _models["lead_scoring_v2"] = joblib.load(lead_v2_rf_path)
         logger.info("Lead Scoring v2 (Random Forest) model loaded.")
+    elif os.path.exists(lead_v2_xgb_path):
+        _models["lead_scoring_v2"] = joblib.load(lead_v2_xgb_path)
+        logger.info("Lead Scoring v2 (XGBoost) model loaded.")
     else:
         logger.warning("Lead Scoring v2 model not found.")
 
@@ -356,6 +356,8 @@ def explain_lead_v2(features: LeadFeaturesV2):
         return response_json
 
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         logger.error(f"Lead scoring v2 explanation error: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
