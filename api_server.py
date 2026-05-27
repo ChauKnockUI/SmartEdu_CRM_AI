@@ -80,6 +80,7 @@ _models: dict = {
     "lead_scoring"    : None,
     "lead_scoring_v2" : None,   # v2 model (CRM business features)
     "dropout_risk"    : None,
+    "dropout_risk_version": "none",
 }
 
 
@@ -114,10 +115,16 @@ def _load_models() -> None:
 
     # Dropout Risk model
     # Mô hình cảnh báo sớm học viên dựa trên chuyên cần và bài tập
-    dropout_path = os.path.join(base, "ai_models", "dropout_model_pipeline.pkl")
-    if os.path.exists(dropout_path):
+    dropout_v2_path = os.path.join(base, "ai_models", "dropout_model_v2_pipeline.pkl")
+    dropout_path    = os.path.join(base, "ai_models", "dropout_model_pipeline.pkl")
+    if os.path.exists(dropout_v2_path):
+        _models["dropout_risk"] = joblib.load(dropout_v2_path)
+        _models["dropout_risk_version"] = "v2"
+        logger.info("Dropout Risk v2 model loaded.")
+    elif os.path.exists(dropout_path):
         _models["dropout_risk"] = joblib.load(dropout_path)
-        logger.info("Dropout Risk model loaded.")
+        _models["dropout_risk_version"] = "v1"
+        logger.info("Dropout Risk legacy model loaded.")
     else:
         logger.warning(f"Dropout Risk model not found: {dropout_path}")
 
@@ -186,14 +193,43 @@ class DropoutFeatures(BaseModel):
     - Consecutive_Absences  : Số buổi vắng LIÊN TIẾP ở thời điểm hiện tại (còi báo đỏ)
     - Missed_Homework_Ratio : Tỷ lệ bài tập không nộp tính đến hiện tại (0.0 = không lỡ, 1.0 = lỡ hết)
     """
-    Excused_Absences    : int   = Field(..., ge=0, example=1,
-                                        description="Sessions missed with prior notice")
-    Unexcused_Absences  : int   = Field(..., ge=0, example=2,
-                                        description="Sessions missed without any notice")
-    Consecutive_Absences: int   = Field(..., ge=0, example=2,
-                                        description="Current streak of consecutive missed sessions")
-    Missed_Homework_Ratio: float = Field(..., ge=0.0, le=1.0, example=0.30,
-                                         description="Ratio of homework assignments not submitted (0.0–1.0)")
+    Attendance_Rate: float = Field(..., ge=0.0, le=1.0, example=0.72)
+    Unexcused_Absence_Count: int = Field(..., ge=0, example=3)
+    Unexcused_Absence_Rate: float = Field(..., ge=0.0, le=1.0, example=0.18)
+    Late_Count: int = Field(..., ge=0, example=2)
+    Consecutive_Unexcused_Absences: int = Field(..., ge=0, example=2)
+    Days_Since_Last_Attended: int = Field(..., ge=0, example=7)
+    Assignment_Missing_Rate: float = Field(..., ge=0.0, le=1.0, example=0.45)
+    Assignment_Late_Count: int = Field(..., ge=0, example=1)
+    Average_Score: float = Field(..., ge=0.0, le=10.0, example=6.4)
+    Score_Trend: float = Field(..., example=-1.2)
+    Has_Overdue_Invoice: int = Field(..., ge=0, le=1, example=1)
+    Days_Overdue: int = Field(..., ge=0, example=10)
+    Class_Progress_Ratio: float = Field(..., ge=0.0, le=1.0, example=0.55)
+
+
+def _dropout_reasons(features: DropoutFeatures) -> list[str]:
+    reasons: list[str] = []
+
+    if features.Consecutive_Unexcused_Absences >= 2:
+        reasons.append(f"Vang khong phep {features.Consecutive_Unexcused_Absences} buoi lien tiep")
+    if features.Unexcused_Absence_Rate >= 0.2 or features.Unexcused_Absence_Count >= 3:
+        reasons.append(f"Vang khong phep {features.Unexcused_Absence_Count} buoi")
+    if features.Assignment_Missing_Rate >= 0.35:
+        reasons.append(f"Khong nop {round(features.Assignment_Missing_Rate * 100)}% bai tap")
+    if features.Days_Since_Last_Attended >= 7:
+        reasons.append(f"Da {features.Days_Since_Last_Attended} ngay chua tham gia buoi hoc")
+    if features.Average_Score < 5.0:
+        reasons.append(f"Diem trung binh thap ({features.Average_Score:.1f}/10)")
+    if features.Score_Trend <= -1.0:
+        reasons.append("Ket qua hoc tap dang giam")
+    if features.Has_Overdue_Invoice:
+        reasons.append(f"Co hoc phi qua han {features.Days_Overdue} ngay")
+
+    if not reasons:
+        reasons.append("Khong co dau hieu rui ro lon trong du lieu hien tai")
+
+    return reasons[:4]
 
 
 # ---------------------------------------------------------------------------
@@ -385,10 +421,19 @@ def predict_dropout(features: DropoutFeatures):
 
     try:
         input_df = pd.DataFrame([{
-            "Excused_Absences"    : features.Excused_Absences,
-            "Unexcused_Absences"  : features.Unexcused_Absences,
-            "Consecutive_Absences": features.Consecutive_Absences,
-            "Missed_Homework_Ratio": features.Missed_Homework_Ratio,
+            "Attendance_Rate": features.Attendance_Rate,
+            "Unexcused_Absence_Count": features.Unexcused_Absence_Count,
+            "Unexcused_Absence_Rate": features.Unexcused_Absence_Rate,
+            "Late_Count": features.Late_Count,
+            "Consecutive_Unexcused_Absences": features.Consecutive_Unexcused_Absences,
+            "Days_Since_Last_Attended": features.Days_Since_Last_Attended,
+            "Assignment_Missing_Rate": features.Assignment_Missing_Rate,
+            "Assignment_Late_Count": features.Assignment_Late_Count,
+            "Average_Score": features.Average_Score,
+            "Score_Trend": features.Score_Trend,
+            "Has_Overdue_Invoice": features.Has_Overdue_Invoice,
+            "Days_Overdue": features.Days_Overdue,
+            "Class_Progress_Ratio": features.Class_Progress_Ratio,
         }])
 
         probability = float(_models["dropout_risk"].predict_proba(input_df)[0][1])
@@ -404,8 +449,10 @@ def predict_dropout(features: DropoutFeatures):
             action     = "Student is on track. No immediate action required."
 
         return {
+            "model_version"       : _models["dropout_risk_version"],
             "risk_level"         : risk_level,
             "dropout_probability": round(probability * 100, 2),
+            "top_reasons"        : _dropout_reasons(features),
             "action"             : action,
         }
 
