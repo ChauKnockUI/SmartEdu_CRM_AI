@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <style>
+    .title{font:700 44px Arial,sans-serif;fill:#0f172a}
+    .sub{font:400 22px Arial,sans-serif;fill:#475569}
+    .panel{fill:#0f172a;rx:18}
+    .panel2{fill:#ffffff;stroke:#cbd5e1;stroke-width:3;rx:18}
+    .code{font:400 21px Consolas,monospace;fill:#dbeafe}
+    .code2{font:400 21px Consolas,monospace;fill:#0f172a}
+    .h{font:700 28px Arial,sans-serif;fill:#0f172a}
+    .tag{font:700 20px Arial,sans-serif;fill:white}
+    .pill{fill:#2563eb}
+    .arrow{stroke:#2563eb;stroke-width:6;fill:none;marker-end:url(#arrow)}
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#2563eb"/>
+    </marker>
+  </defs>
+  <rect width="1600" height="900" fill="#f8fafc"/>
+  <text x="80" y="86" class="title">API Contract - /predict-dropout</text>
+  <text x="82" y="125" class="sub">Backend gui feature da aggregate, AI tra ve score, risk level, ly do va goi y hanh dong</text>
+
+  <rect x="80" y="195" width="620" height="560" class="panel"/>
+  <rect x="105" y="220" width="130" height="42" class="pill" rx="12"/>
+  <text x="128" y="248" class="tag">Request</text>
+  <text x="120" y="305" class="code">{</text>
+  <text x="150" y="340" class="code">"Attendance_Rate": 0.72,</text>
+  <text x="150" y="375" class="code">"Unexcused_Absence_Count": 3,</text>
+  <text x="150" y="410" class="code">"Consecutive_Unexcused_Absences": 2,</text>
+  <text x="150" y="445" class="code">"Days_Since_Last_Attended": 7,</text>
+  <text x="150" y="480" class="code">"Assignment_Missing_Rate": 0.45,</text>
+  <text x="150" y="515" class="code">"Average_Score": 6.4,</text>
+  <text x="150" y="550" class="code">"Score_Trend": -1.2,</text>
+  <text x="150" y="585" class="code">"Has_Overdue_Invoice": 1,</text>
+  <text x="150" y="620" class="code">"Days_Overdue": 10,</text>
+  <text x="150" y="655" class="code">"Class_Progress_Ratio": 0.55</text>
+  <text x="120" y="690" class="code">}</text>
+
+  <path d="M730 475 H850" class="arrow"/>
+
+  <rect x="880" y="195" width="640" height="560" class="panel2"/>
+  <rect x="905" y="220" width="145" height="42" fill="#059669" rx="12"/>
+  <text x="928" y="248" class="tag">Response</text>
+  <text x="930" y="305" class="code2">{</text>
+  <text x="960" y="340" class="code2">"model_version": "v2",</text>
+  <text x="960" y="375" class="code2">"risk_level": "HIGH_RISK",</text>
+  <text x="960" y="410" class="code2">"dropout_probability": 82.4,</text>
+  <text x="960" y="445" class="code2">"top_reasons": [</text>
+  <text x="990" y="480" class="code2">"Vang khong phep 2 buoi lien tiep",</text>
+  <text x="990" y="515" class="code2">"Khong nop 45% bai tap",</text>
+  <text x="990" y="550" class="code2">"Co hoc phi qua han 10 ngay"</text>
+  <text x="960" y="585" class="code2">],</text>
+  <text x="960" y="620" class="code2">"action": "Contact student within 24 hours"</text>
+  <text x="930" y="655" class="code2">}</text>
+
+  <text x="90" y="820" class="h">Integration:</text>
+  <text x="250" y="820" class="sub">BE luu ket qua vao Student va ghi log vao AIPrediction de theo doi, audit va retrain.</text>
+</svg>

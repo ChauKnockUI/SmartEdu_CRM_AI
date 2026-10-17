@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#0f766e"/>
+    </marker>
+    <style>
+      .title{font:700 44px Arial,sans-serif;fill:#0f172a}
+      .sub{font:400 22px Arial,sans-serif;fill:#475569}
+      .step{fill:white;stroke:#99f6e4;stroke-width:3;rx:18}
+      .num{font:700 28px Arial,sans-serif;fill:white}
+      .h{font:700 25px Arial,sans-serif;fill:#0f172a}
+      .t{font:400 19px Arial,sans-serif;fill:#334155}
+      .pill{fill:#0f766e}
+      .line{stroke:#0f766e;stroke-width:4;fill:none;marker-end:url(#arrow)}
+      .note{font:700 24px Arial,sans-serif;fill:#92400e}
+      .noteBody{font:400 19px Arial,sans-serif;fill:#78350f}
+    </style>
+  </defs>
+  <rect width="1600" height="900" fill="#f0fdfa"/>
+  <text x="80" y="86" class="title">Business Flow - Early Warning System</text>
+  <text x="82" y="125" class="sub">Tu su kien trong lop hoc den canh bao hanh dong cho CSKH</text>
+
+  <g transform="translate(80 220)">
+    <rect width="260" height="150" class="step"/>
+    <circle cx="45" cy="45" r="26" class="pill"/><text x="37" y="55" class="num">1</text>
+    <text x="85" y="48" class="h">Ghi nhan su kien</text>
+    <text x="32" y="92" class="t">Diem danh, bai tap,</text>
+    <text x="32" y="122" class="t">diem so, hoc phi</text>
+  </g>
+
+  <g transform="translate(410 220)">
+    <rect width="260" height="150" class="step"/>
+    <circle cx="45" cy="45" r="26" class="pill"/><text x="37" y="55" class="num">2</text>
+    <text x="85" y="48" class="h">Tong hop feature</text>
+    <text x="32" y="92" class="t">Theo student_id</text>
+    <text x="32" y="122" class="t">va class_id</text>
+  </g>
+
+  <g transform="translate(740 220)">
+    <rect width="260" height="150" class="step"/>
+    <circle cx="45" cy="45" r="26" class="pill"/><text x="37" y="55" class="num">3</text>
+    <text x="85" y="48" class="h">AI scoring</text>
+    <text x="32" y="92" class="t">POST /predict-dropout</text>
+    <text x="32" y="122" class="t">tra score + reasons</text>
+  </g>
+
+  <g transform="translate(1070 220)">
+    <rect width="260" height="150" class="step"/>
+    <circle cx="45" cy="45" r="26" class="pill"/><text x="37" y="55" class="num">4</text>
+    <text x="85" y="48" class="h">Luu ket qua</text>
+    <text x="32" y="92" class="t">Update Student</text>
+    <text x="32" y="122" class="t">Log AIPrediction</text>
+  </g>
+
+  <g transform="translate(610 520)">
+    <rect width="380" height="160" class="step"/>
+    <circle cx="50" cy="50" r="28" class="pill"/><text x="42" y="60" class="num">5</text>
+    <text x="95" y="54" class="h">Can thiep som</text>
+    <text x="38" y="102" class="t">FE hien thi risk, ly do,</text>
+    <text x="38" y="132" class="t">goi y lien he hoc vien</text>
+  </g>
+
+  <path d="M340 295 H410" class="line"/>
+  <path d="M670 295 H740" class="line"/>
+  <path d="M1000 295 H1070" class="line"/>
+  <path d="M1200 370 C1200 500 1000 600 990 600" class="line"/>
+
+  <rect x="1080" y="560" width="360" height="145" fill="#fffbeb" stroke="#f59e0b" stroke-width="3" rx="18"/>
+  <text x="1115" y="605" class="note">Business Rule</text>
+  <text x="1115" y="645" class="noteBody">AI la he thong canh bao,</text>
+  <text x="1115" y="674" class="noteBody">khong tu dong ket luan hoc vien da nghi.</text>
+</svg>

@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <style>
+    .title{font:700 44px Arial,sans-serif;fill:#111827}
+    .sub{font:400 22px Arial,sans-serif;fill:#4b5563}
+    .card{fill:white;stroke:#d1d5db;stroke-width:3;rx:18}
+    .h{font:700 25px Arial,sans-serif;fill:#111827}
+    .t{font:400 19px Arial,sans-serif;fill:#374151}
+    .tag{font:700 18px Arial,sans-serif;fill:white}
+    .center{fill:#111827}
+  </style>
+  <rect width="1600" height="900" fill="#f9fafb"/>
+  <text x="80" y="86" class="title">Dropout Model v2 - Feature Engineering</text>
+  <text x="82" y="125" class="sub">13 feature duoc tong hop tu du lieu that cua CRM/LMS theo tung hoc vien trong tung lop</text>
+
+  <circle cx="800" cy="455" r="128" fill="#111827"/>
+  <text x="724" y="430" class="tag">Dropout</text>
+  <text x="694" y="465" class="tag">Risk Model v2</text>
+  <text x="713" y="500" class="tag">Random Forest</text>
+
+  <rect x="90" y="210" width="420" height="210" class="card"/>
+  <rect x="90" y="210" width="420" height="48" fill="#2563eb" rx="18"/>
+  <text x="120" y="242" class="tag">Attendance Signals</text>
+  <text x="120" y="300" class="h">Di hoc va vang hoc</text>
+  <text x="120" y="338" class="t">Attendance_Rate</text>
+  <text x="120" y="368" class="t">Unexcused_Absence_Count / Rate</text>
+  <text x="120" y="398" class="t">Late_Count, Consecutive_Unexcused</text>
+
+  <rect x="1090" y="210" width="420" height="210" class="card"/>
+  <rect x="1090" y="210" width="420" height="48" fill="#059669" rx="18"/>
+  <text x="1120" y="242" class="tag">Assignment Signals</text>
+  <text x="1120" y="300" class="h">Muc do tuong tac bai tap</text>
+  <text x="1120" y="338" class="t">Assignment_Missing_Rate</text>
+  <text x="1120" y="368" class="t">Assignment_Late_Count</text>
+  <text x="1120" y="398" class="t">Submitted / late / missing / excused</text>
+
+  <rect x="90" y="535" width="420" height="210" class="card"/>
+  <rect x="90" y="535" width="420" height="48" fill="#7c3aed" rx="18"/>
+  <text x="120" y="567" class="tag">Learning Signals</text>
+  <text x="120" y="625" class="h">Ket qua hoc tap</text>
+  <text x="120" y="663" class="t">Average_Score</text>
+  <text x="120" y="693" class="t">Score_Trend</text>
+  <text x="120" y="723" class="t">Diem giam la dau hieu can can thiep</text>
+
+  <rect x="1090" y="535" width="420" height="210" class="card"/>
+  <rect x="1090" y="535" width="420" height="48" fill="#dc2626" rx="18"/>
+  <text x="1120" y="567" class="tag">Finance & Context</text>
+  <text x="1120" y="625" class="h">Hoc phi va tien do lop</text>
+  <text x="1120" y="663" class="t">Has_Overdue_Invoice, Days_Overdue</text>
+  <text x="1120" y="693" class="t">Days_Since_Last_Attended</text>
+  <text x="1120" y="723" class="t">Class_Progress_Ratio</text>
+
+  <path d="M510 315 C610 315 650 400 675 430" stroke="#94a3b8" stroke-width="4" fill="none"/>
+  <path d="M1090 315 C990 315 950 400 925 430" stroke="#94a3b8" stroke-width="4" fill="none"/>
+  <path d="M510 640 C610 640 650 520 675 480" stroke="#94a3b8" stroke-width="4" fill="none"/>
+  <path d="M1090 640 C990 640 950 520 925 480" stroke="#94a3b8" stroke-width="4" fill="none"/>
+</svg>

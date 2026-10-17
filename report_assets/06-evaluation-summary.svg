@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <style>
+    .title{font:700 44px Arial,sans-serif;fill:#0f172a}
+    .sub{font:400 22px Arial,sans-serif;fill:#475569}
+    .card{fill:white;stroke:#e2e8f0;stroke-width:3;rx:18}
+    .metric{font:700 54px Arial,sans-serif;fill:#047857}
+    .label{font:700 24px Arial,sans-serif;fill:#0f172a}
+    .desc{font:400 19px Arial,sans-serif;fill:#475569}
+    .barBg{fill:#e5e7eb;rx:12}
+    .bar{fill:#10b981;rx:12}
+    .warn{fill:#fef3c7;stroke:#f59e0b;stroke-width:3;rx:18}
+    .warnText{font:400 21px Arial,sans-serif;fill:#78350f}
+  </style>
+  <rect width="1600" height="900" fill="#f8fafc"/>
+  <text x="80" y="86" class="title">Model Evaluation Summary</text>
+  <text x="82" y="125" class="sub">Ket qua QA cua Dropout Risk Model v2 tren synthetic business dataset</text>
+
+  <rect x="90" y="210" width="330" height="210" class="card"/>
+  <text x="125" y="275" class="label">ROC-AUC</text>
+  <text x="125" y="350" class="metric">0.8981</text>
+  <text x="125" y="390" class="desc">Muc tieu: >= 0.85</text>
+
+  <rect x="460" y="210" width="330" height="210" class="card"/>
+  <text x="495" y="275" class="label">Recall @ 40%</text>
+  <text x="495" y="350" class="metric">0.8860</text>
+  <text x="495" y="390" class="desc">Bat duoc phan lon hoc vien rui ro</text>
+
+  <rect x="830" y="210" width="330" height="210" class="card"/>
+  <text x="865" y="275" class="label">False Negative Rate</text>
+  <text x="865" y="350" class="metric">11.4%</text>
+  <text x="865" y="390" class="desc">Muc tieu: <= 20%</text>
+
+  <rect x="1200" y="210" width="310" height="210" class="card"/>
+  <text x="1235" y="275" class="label">Behavior Tests</text>
+  <text x="1235" y="350" class="metric">100%</text>
+  <text x="1235" y="390" class="desc">Monotonicity + scenarios</text>
+
+  <rect x="140" y="535" width="1320" height="70" class="barBg"/>
+  <rect x="140" y="535" width="1186" height="70" class="bar"/>
+  <text x="165" y="580" class="label">Model dat nguong acceptance cho MVP Early Warning</text>
+
+  <rect x="160" y="675" width="1280" height="120" class="warn"/>
+  <text x="205" y="725" class="warnText">Luu y khi bao cao: dataset hien tai la synthetic co rule nghiep vu, dung de bootstrap va demo.</text>
+  <text x="205" y="765" class="warnText">Huong phat trien tiep theo: thu thap du lieu that tu AIPrediction + ket qua nghi hoc de retrain/calibrate.</text>
+</svg>

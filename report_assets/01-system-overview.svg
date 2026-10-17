@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2563eb"/>
+    </marker>
+    <style>
+      .title{font:700 44px Arial, sans-serif;fill:#0f172a}
+      .sub{font:400 22px Arial, sans-serif;fill:#475569}
+      .h{font:700 26px Arial, sans-serif;fill:#0f172a}
+      .t{font:400 20px Arial, sans-serif;fill:#334155}
+      .small{font:400 17px Arial, sans-serif;fill:#475569}
+      .box{fill:#ffffff;stroke:#cbd5e1;stroke-width:3;rx:20}
+      .blue{fill:#eff6ff;stroke:#60a5fa}
+      .green{fill:#ecfdf5;stroke:#34d399}
+      .amber{fill:#fffbeb;stroke:#f59e0b}
+      .red{fill:#fef2f2;stroke:#f87171}
+      .line{stroke:#2563eb;stroke-width:4;fill:none;marker-end:url(#arrow)}
+    </style>
+  </defs>
+
+  <rect width="1600" height="900" fill="#f8fafc"/>
+  <text x="80" y="86" class="title">SmartEdu CRM - Dropout Early Warning Architecture</text>
+  <text x="82" y="125" class="sub">Module AI du doan nguy co nghi hoc dua tren du lieu LMS, hoc phi va ket qua hoc tap</text>
+
+  <rect x="80" y="210" width="280" height="190" class="box blue"/>
+  <text x="115" y="260" class="h">CRM / LMS Data</text>
+  <text x="115" y="302" class="t">Attendance</text>
+  <text x="115" y="334" class="t">Assignments</text>
+  <text x="115" y="366" class="t">Invoices</text>
+  <text x="115" y="398" class="t">Test Results</text>
+
+  <rect x="470" y="210" width="300" height="190" class="box green"/>
+  <text x="505" y="260" class="h">Backend Aggregator</text>
+  <text x="505" y="302" class="t">Prepare features</text>
+  <text x="505" y="334" class="t">Call AI service</text>
+  <text x="505" y="366" class="t">Persist risk + log</text>
+
+  <rect x="880" y="210" width="300" height="190" class="box amber"/>
+  <text x="915" y="260" class="h">AI Service</text>
+  <text x="915" y="302" class="t">Random Forest v2</text>
+  <text x="915" y="334" class="t">Probability score</text>
+  <text x="915" y="366" class="t">Top reasons</text>
+
+  <rect x="1290" y="210" width="230" height="190" class="box red"/>
+  <text x="1325" y="260" class="h">Frontend</text>
+  <text x="1325" y="302" class="t">Risk badge</text>
+  <text x="1325" y="334" class="t">Reasons</text>
+  <text x="1325" y="366" class="t">Action hints</text>
+
+  <path d="M360 305 H470" class="line"/>
+  <path d="M770 305 H880" class="line"/>
+  <path d="M1180 305 H1290" class="line"/>
+
+  <rect x="470" y="530" width="710" height="160" class="box"/>
+  <text x="515" y="582" class="h">Database Persistence</text>
+  <text x="515" y="625" class="t">students.dropout_risk, dropout_risk_level, dropout_risk_reasons</text>
+  <text x="515" y="660" class="t">ai_predictions append-only log for monitoring and retraining</text>
+
+  <path d="M620 400 V530" class="line"/>
+  <path d="M1030 400 V530" class="line"/>
+
+  <text x="80" y="805" class="small">Key idea: AI khong thay the giao vien/CSKH; AI uu tien danh sach hoc vien can can thiep som.</text>
+</svg>
