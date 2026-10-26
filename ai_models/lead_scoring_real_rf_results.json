@@ -1,0 +1,63 @@
+{
+  "dataset_real_records": 9240,
+  "cv_summary": {
+    "accuracy": 0.8419913419913421,
+    "f1": 0.7861752700821801,
+    "roc_auc": 0.9153391751213065,
+    "precision": 0.821439022913707,
+    "recall": 0.7539979828860488
+  },
+  "real_model_test_metrics": {
+    "accuracy": 0.841991341991342,
+    "f1_score": 0.7877906976744186,
+    "roc_auc": 0.90972352725906,
+    "precision": 0.8162650602409639,
+    "recall": 0.7612359550561798,
+    "brier_score": 0.11462343341866468,
+    "confusion_matrix": [
+      [
+        1014,
+        122
+      ],
+      [
+        170,
+        542
+      ]
+    ]
+  },
+  "synthetic_baseline_metrics": {
+    "accuracy": 0.711,
+    "f1_score": 0.6202365308804205,
+    "roc_auc": 0.774780133757988,
+    "precision": 0.6742857142857143,
+    "recall": 0.5742092457420924,
+    "brier_score": 0.18972985318382998,
+    "confusion_matrix": [
+      [
+        475,
+        114
+      ],
+      [
+        175,
+        236
+      ]
+    ]
+  },
+  "scenario_results": [
+    {
+      "name": "HOT Lead (Referral, SV nam 3/4, IELTS, Positive interaction, 2 ngay)",
+      "prob": 0.33152615144418424,
+      "label": "COLD_LEAD"
+    },
+    {
+      "name": "WARM Lead (Google Ads, Nguoi di lam, TOEIC, Can suy nghi them, 5 ngay)",
+      "prob": 0.9923655913978495,
+      "label": "HOT_LEAD"
+    },
+    {
+      "name": "COLD Lead (Facebook, Khong ro nghe nghiep, Goi 5 lan khong bat may, 25 ngay)",
+      "prob": 0.006349206349206349,
+      "label": "COLD_LEAD"
+    }
+  ]
+}
