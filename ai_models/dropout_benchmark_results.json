@@ -1,0 +1,72 @@
+{
+  "benchmark_models": {
+    "Dummy (Baseline)": {
+      "accuracy": 0.5836,
+      "balanced_accuracy": 0.5,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "roc_auc": 0.5,
+      "brier_loss": 0.4164
+    },
+    "Logistic Regression": {
+      "accuracy": 0.8128,
+      "balanced_accuracy": 0.7953,
+      "precision": 0.8313,
+      "recall": 0.6905,
+      "f1_score": 0.7544,
+      "roc_auc": 0.8633,
+      "brier_loss": 0.1436
+    },
+    "Decision Tree": {
+      "accuracy": 0.8347,
+      "balanced_accuracy": 0.8178,
+      "precision": 0.8629,
+      "recall": 0.7168,
+      "f1_score": 0.7831,
+      "roc_auc": 0.8818,
+      "brier_loss": 0.1297
+    },
+    "Random Forest (Proposed)": {
+      "accuracy": 0.8401,
+      "balanced_accuracy": 0.8273,
+      "precision": 0.8482,
+      "recall": 0.7504,
+      "f1_score": 0.7963,
+      "roc_auc": 0.9128,
+      "brier_loss": 0.1163
+    }
+  },
+  "rf_cv_summary": {
+    "cv_accuracy_mean": 0.8427,
+    "cv_accuracy_std": 0.0068,
+    "cv_roc_auc_mean": 0.9046,
+    "cv_roc_auc_std": 0.006,
+    "cv_f1_mean": 0.7982,
+    "cv_f1_std": 0.0097
+  },
+  "cross_domain_evaluation": {
+    "Train_UCI_Test_OULAD": {
+      "roc_auc": 0.7888,
+      "f1": 0.7124
+    },
+    "Train_OULAD_Test_UCI": {
+      "roc_auc": 0.594,
+      "f1": 0.469
+    },
+    "Train_Blended_Test_Blended": {
+      "roc_auc": 0.9128,
+      "f1": 0.7963
+    }
+  },
+  "test_confusion_matrix": [
+    [
+      868,
+      92
+    ],
+    [
+      171,
+      514
+    ]
+  ]
+}
