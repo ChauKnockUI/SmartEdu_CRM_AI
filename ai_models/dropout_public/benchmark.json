@@ -1,0 +1,384 @@
+{
+  "uci_academic": {
+    "features": [
+      "Average_Score",
+      "Pass_Rate",
+      "Not_Evaluated_Rate"
+    ],
+    "selected_model": "Random Forest",
+    "models": {
+      "Dummy (prior)": {
+        "oof_average_precision": 0.37945421526986867,
+        "test": {
+          "n": 695,
+          "base_rate": 0.3827,
+          "roc_auc": 0.5,
+          "pr_auc": 0.3827,
+          "brier": 0.2363,
+          "threshold": 0.38257745846430175,
+          "precision": 0.3827,
+          "recall": 1.0,
+          "f1": 0.5536,
+          "f2": 0.7561,
+          "balanced_accuracy": 0.5
+        }
+      },
+      "Logistic Regression": {
+        "oof_average_precision": 0.9021619302039562,
+        "test": {
+          "n": 695,
+          "base_rate": 0.3827,
+          "roc_auc": 0.8955,
+          "pr_auc": 0.8933,
+          "brier": 0.1111,
+          "threshold": 0.34322579978268547,
+          "precision": 0.736,
+          "recall": 0.8383,
+          "f1": 0.7838,
+          "f2": 0.8157,
+          "balanced_accuracy": 0.8259
+        }
+      },
+      "Decision Tree": {
+        "oof_average_precision": 0.895220406974271,
+        "test": {
+          "n": 695,
+          "base_rate": 0.3827,
+          "roc_auc": 0.8986,
+          "pr_auc": 0.8804,
+          "brier": 0.1105,
+          "threshold": 0.20522388059701502,
+          "precision": 0.6814,
+          "recall": 0.8684,
+          "f1": 0.7636,
+          "f2": 0.8232,
+          "balanced_accuracy": 0.8083
+        }
+      },
+      "Random Forest": {
+        "oof_average_precision": 0.9051857694824605,
+        "test": {
+          "n": 695,
+          "base_rate": 0.3827,
+          "roc_auc": 0.9033,
+          "pr_auc": 0.8979,
+          "brier": 0.1085,
+          "threshold": 0.25743725081696095,
+          "precision": 0.6834,
+          "recall": 0.8684,
+          "f1": 0.7649,
+          "f2": 0.8238,
+          "balanced_accuracy": 0.8095
+        }
+      },
+      "HistGradientBoosting": {
+        "oof_average_precision": 0.9003529134758079,
+        "test": {
+          "n": 695,
+          "base_rate": 0.3827,
+          "roc_auc": 0.9008,
+          "pr_auc": 0.8971,
+          "brier": 0.1078,
+          "threshold": 0.23138452468088846,
+          "precision": 0.6472,
+          "recall": 0.8759,
+          "f1": 0.7444,
+          "f2": 0.8181,
+          "balanced_accuracy": 0.79
+        }
+      }
+    },
+    "selected_ci": {
+      "roc_auc_95ci": [
+        0.8761,
+        0.9323
+      ],
+      "pr_auc_95ci": [
+        0.8667,
+        0.9254
+      ]
+    },
+    "confusion_matrix": [
+      [
+        322,
+        107
+      ],
+      [
+        35,
+        231
+      ]
+    ],
+    "train_rows": 2783,
+    "test_rows": 695,
+    "protocol": {
+      "schema_version": "public_center_baseline_1",
+      "source": "UCI",
+      "seed": 42,
+      "dataset_sha256": "b2ed35bb2490e480571afdd6fd5a1639ae72028fcbab80157263e6ba3c234fcd",
+      "split_sha256": "d3b5c718a816eddbb7b0c6c84884317187c3d2bcac9371382d666f1fba1ed2c5",
+      "raw_sha256": {
+        "dropout_data_uci.csv": "3ef126de5cefff26eb11fbb4237f1a1401cb64b488e2f1d598c23cedeb4c45ae"
+      },
+      "sklearn_version": "1.4.0",
+      "pandas_version": "2.2.0",
+      "split": "StratifiedGroupKFold by student, 1/5 holdout, 5-fold train OOF"
+    }
+  },
+  "uci_academic_finance": {
+    "features": [
+      "Average_Score",
+      "Pass_Rate",
+      "Not_Evaluated_Rate",
+      "Has_Debt",
+      "Tuition_Up_To_Date"
+    ],
+    "selected_model": "Logistic Regression",
+    "models": {
+      "Dummy (prior)": {
+        "oof_average_precision": 0.37945421526986867,
+        "test": {
+          "n": 695,
+          "base_rate": 0.3827,
+          "roc_auc": 0.5,
+          "pr_auc": 0.3827,
+          "brier": 0.2363,
+          "threshold": 0.38257745846430175,
+          "precision": 0.3827,
+          "recall": 1.0,
+          "f1": 0.5536,
+          "f2": 0.7561,
+          "balanced_accuracy": 0.5
+        }
+      },
+      "Logistic Regression": {
+        "oof_average_precision": 0.9237311359196632,
+        "test": {
+          "n": 695,
+          "base_rate": 0.3827,
+          "roc_auc": 0.9208,
+          "pr_auc": 0.9209,
+          "brier": 0.0915,
+          "threshold": 0.3058873336283293,
+          "precision": 0.7607,
+          "recall": 0.8722,
+          "f1": 0.8126,
+          "f2": 0.8473,
+          "balanced_accuracy": 0.851
+        }
+      },
+      "Decision Tree": {
+        "oof_average_precision": 0.9125007121696878,
+        "test": {
+          "n": 695,
+          "base_rate": 0.3827,
+          "roc_auc": 0.9205,
+          "pr_auc": 0.906,
+          "brier": 0.09,
+          "threshold": 0.23948445528172102,
+          "precision": 0.7066,
+          "recall": 0.8872,
+          "f1": 0.7867,
+          "f2": 0.8441,
+          "balanced_accuracy": 0.8294
+        }
+      },
+      "Random Forest": {
+        "oof_average_precision": 0.9227241050368931,
+        "test": {
+          "n": 695,
+          "base_rate": 0.3827,
+          "roc_auc": 0.9236,
+          "pr_auc": 0.9223,
+          "brier": 0.0902,
+          "threshold": 0.3166872101280297,
+          "precision": 0.7726,
+          "recall": 0.8684,
+          "f1": 0.8177,
+          "f2": 0.8474,
+          "balanced_accuracy": 0.855
+        }
+      },
+      "HistGradientBoosting": {
+        "oof_average_precision": 0.9191747056348774,
+        "test": {
+          "n": 695,
+          "base_rate": 0.3827,
+          "roc_auc": 0.923,
+          "pr_auc": 0.9215,
+          "brier": 0.0903,
+          "threshold": 0.24894852009138524,
+          "precision": 0.7346,
+          "recall": 0.8947,
+          "f1": 0.8068,
+          "f2": 0.8573,
+          "balanced_accuracy": 0.8471
+        }
+      }
+    },
+    "selected_ci": {
+      "roc_auc_95ci": [
+        0.8958,
+        0.9475
+      ],
+      "pr_auc_95ci": [
+        0.8949,
+        0.9452
+      ]
+    },
+    "confusion_matrix": [
+      [
+        356,
+        73
+      ],
+      [
+        34,
+        232
+      ]
+    ],
+    "train_rows": 2783,
+    "test_rows": 695,
+    "protocol": {
+      "schema_version": "public_center_baseline_1",
+      "source": "UCI",
+      "seed": 42,
+      "dataset_sha256": "b2ed35bb2490e480571afdd6fd5a1639ae72028fcbab80157263e6ba3c234fcd",
+      "split_sha256": "d3b5c718a816eddbb7b0c6c84884317187c3d2bcac9371382d666f1fba1ed2c5",
+      "raw_sha256": {
+        "dropout_data_uci.csv": "3ef126de5cefff26eb11fbb4237f1a1401cb64b488e2f1d598c23cedeb4c45ae"
+      },
+      "sklearn_version": "1.4.0",
+      "pandas_version": "2.2.0",
+      "split": "StratifiedGroupKFold by student, 1/5 holdout, 5-fold train OOF"
+    }
+  },
+  "oulad_assessment": {
+    "features": [
+      "Average_Score",
+      "Pass_Rate",
+      "Assignment_Missing_Rate",
+      "Assignment_Late_Count",
+      "Score_Trend"
+    ],
+    "selected_model": "HistGradientBoosting",
+    "models": {
+      "Dummy (prior)": {
+        "oof_average_precision": 0.17913413602482997,
+        "test": {
+          "n": 5500,
+          "base_rate": 0.1864,
+          "roc_auc": 0.5,
+          "pr_auc": 0.1864,
+          "brier": 0.1516,
+          "threshold": 0.18095673022034478,
+          "precision": 0.1864,
+          "recall": 1.0,
+          "f1": 0.3142,
+          "f2": 0.5339,
+          "balanced_accuracy": 0.5
+        }
+      },
+      "Logistic Regression": {
+        "oof_average_precision": 0.32227840222340565,
+        "test": {
+          "n": 5500,
+          "base_rate": 0.1864,
+          "roc_auc": 0.66,
+          "pr_auc": 0.3085,
+          "brier": 0.2263,
+          "threshold": 0.34147997812084796,
+          "precision": 0.199,
+          "recall": 0.9366,
+          "f1": 0.3283,
+          "f2": 0.5379,
+          "balanced_accuracy": 0.5366
+        }
+      },
+      "Decision Tree": {
+        "oof_average_precision": 0.3319564281084626,
+        "test": {
+          "n": 5500,
+          "base_rate": 0.1864,
+          "roc_auc": 0.6681,
+          "pr_auc": 0.3249,
+          "brier": 0.2213,
+          "threshold": 0.3376818602341262,
+          "precision": 0.2035,
+          "recall": 0.9112,
+          "f1": 0.3327,
+          "f2": 0.5375,
+          "balanced_accuracy": 0.5472
+        }
+      },
+      "Random Forest": {
+        "oof_average_precision": 0.3335971267662692,
+        "test": {
+          "n": 5500,
+          "base_rate": 0.1864,
+          "roc_auc": 0.6657,
+          "pr_auc": 0.3291,
+          "brier": 0.2179,
+          "threshold": 0.32364023827514654,
+          "precision": 0.1979,
+          "recall": 0.9541,
+          "f1": 0.3278,
+          "f2": 0.5408,
+          "balanced_accuracy": 0.5342
+        }
+      },
+      "HistGradientBoosting": {
+        "oof_average_precision": 0.33703791137998784,
+        "test": {
+          "n": 5500,
+          "base_rate": 0.1864,
+          "roc_auc": 0.6703,
+          "pr_auc": 0.33,
+          "brier": 0.2219,
+          "threshold": 0.3617160632902301,
+          "precision": 0.2055,
+          "recall": 0.9073,
+          "f1": 0.3351,
+          "f2": 0.5391,
+          "balanced_accuracy": 0.552
+        }
+      }
+    },
+    "selected_ci": {
+      "roc_auc_95ci": [
+        0.6527,
+        0.6868
+      ],
+      "pr_auc_95ci": [
+        0.3065,
+        0.3584
+      ]
+    },
+    "confusion_matrix": [
+      [
+        880,
+        3595
+      ],
+      [
+        95,
+        930
+      ]
+    ],
+    "train_rows": 21943,
+    "test_rows": 5500,
+    "protocol": {
+      "schema_version": "public_center_baseline_1",
+      "source": "OULAD",
+      "seed": 42,
+      "dataset_sha256": "9d2b283077d9f1639739092d108c9b51ea1ba5fb09eda644c12f06521ddabcdb",
+      "split_sha256": "7b3c43af78378a0085e520223604b56cae1e1830204edea84a750a9a28d2e373",
+      "raw_sha256": {
+        "studentInfo.csv": "7e6f3e474a5eee00639d2a414a6c7e928745823c2d2c2563ca1780145f99b0d6",
+        "studentRegistration.csv": "0d32676285372aaf2e7a80304e5b274b4fba24313e2ca4c04317225e1ec90170",
+        "assessments.csv": "8cc738fb88ad760571d6f2a23059bfee0ffcae3bcd830514c9cbd5c6d5a046f1",
+        "studentAssessment.csv": "fd5320786328d05af841ee7dd4b5871b9dada3b9fe9d6a3642b2f42635510a6e"
+      },
+      "sklearn_version": "1.4.0",
+      "pandas_version": "2.2.0",
+      "split": "StratifiedGroupKFold by student, 1/5 holdout, 5-fold train OOF"
+    }
+  }
+}
