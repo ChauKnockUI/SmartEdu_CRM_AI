@@ -23,8 +23,8 @@ RAW = ROOT / "dataset" / "archive"
 PROCESSED = ROOT / "dataset" / "processed"
 OUTPUT = ROOT / "ai_models" / "dropout_public"
 VARIANTS = {
-    "uci_academic": ("UCI", ACADEMIC_FEATURES, "Baseline chính: học tập"),
-    "uci_academic_finance": ("UCI", FINANCE_FEATURES, "Thực nghiệm: học tập + tài chính"),
+    "uci_academic": ("UCI", ACADEMIC_FEATURES, "Đối chứng / dự phòng: học tập"),
+    "uci_academic_finance": ("UCI", FINANCE_FEATURES, "Model tích hợp: học tập + tài chính"),
     "oulad_assessment": ("OULAD", OULAD_FEATURES, "Bổ sung: bài nộp và điểm"),
 }
 
@@ -132,12 +132,12 @@ def report(results, audits):
     lines += ["## Audit và phạm vi sử dụng", "",
               f"UCI: {audits['UCI']['raw_rows']} dòng gốc; loại {audits['UCI']['excluded_unresolved_target']} dòng chưa có nhãn Dropout/Graduate, {audits['UCI']['excluded_invalid_or_zero_enrollment']} dòng không có mẫu số đăng ký hợp lệ; còn {audits['UCI']['output_rows']} dòng.",
               f"OULAD: {audits['OULAD']['raw_rows']} lượt gốc; còn {audits['OULAD']['output_rows']} lượt tại ngày 30. Chi tiết lỗi/loại mẫu: data_audit.json; missingness: missing_rates.csv.", "",
-              "- Baseline chính là `uci_academic_bundle.pkl`; cấu hình tài chính là thực nghiệm riêng, không tự động được chọn thay baseline vì điểm test cao hơn.",
+              "- API dùng `uci_academic_finance_bundle.pkl` với năm feature khi có học phí; `uci_academic_bundle.pkl` là đối chứng và dự phòng khi học phí chưa quan sát được. Thuật toán của mỗi cấu hình vẫn được chọn theo AP OOF train, không theo test.",
               "- UCI là dữ liệu đại học cuối kỳ 1, không chứng minh hiệu quả cảnh báo tuần 3–4 hoặc hiệu quả tại trung tâm. Không có chuyên cần thực trong các CSV này.",
               "- Chưa xác minh thời điểm snapshot tài chính UCI và công bố điểm OULAD; kết quả không chứng minh đã loại hết leakage thời gian. Nhãn UCI là kết quả cuối cùng, không có ngày bỏ học để xác minh mọi ca đều xảy ra sau mốc kỳ 1.",
               "- Điểm test thuộc artifact *_evaluation.pkl (chỉ fit train); *_bundle.pkl được refit toàn bộ nguồn sau đánh giá, không có phép kiểm thử độc lập riêng.",
-              "- API /predict-dropout dùng duy nhất uci_academic_bundle.pkl với ba feature học tập. Backend ánh xạ các bài đánh giá trung tâm thành proxy UCI; chạy từ điểm hợp lệ đầu tiên, không chờ 1/3 khóa. Chuyên cần và học phí dùng quy tắc riêng ngay cả khi chưa có điểm. Đây là tích hợp thử nghiệm; benchmark công khai không xác nhận hiệu quả tại trung tâm. Xem ../DROPOUT_INTEGRATION.md.",
-              "- UI hiện dùng điểm rủi ro tổng hợp hybrid_risk_1: AI học tập 50%, chuyên cần 30%, học phí 20%, phân bổ lại trọng số khi thiếu dữ liệu và có mức sàn cảnh báo. Đây là quy tắc nghiệp vụ ban đầu, không phải xác suất đã hiệu chỉnh. Chỉ số benchmark ở trên thuộc model công khai, không phải chất lượng của điểm tổng hợp tại trung tâm.",
+              "- Backend ánh xạ bài đánh giá và hóa đơn của đúng học viên–lớp thành proxy UCI; AI chạy từ điểm hợp lệ đầu tiên. Has_Debt là còn dư nợ, kể cả chưa đến hạn; Tuition_Up_To_Date là không còn khoản quá hạn. Thiếu hóa đơn hoặc thiếu hạn thanh toán cần thiết thì dùng model học tập. Các proxy tài chính không được khẳng định tương đương hoàn toàn với hai cờ UCI. Xem ../DROPOUT_INTEGRATION.md.",
+              "- UI dùng điểm tổng hợp hybrid_risk_2: khi AI có học phí, AI 70% + chuyên cần 30%, không cộng trọng số học phí riêng. Khi AI chỉ có học tập hoặc không sẵn sàng, dùng chính sách 50/30/20 cho AI học tập/chuyên cần/học phí với trọng số phân bổ lại. Mức sàn học phí vẫn là quy tắc ưu tiên hỗ trợ. Đây không phải xác suất đã hiệu chỉnh; benchmark chỉ đánh giá model công khai.",
               "- Cần snapshot và nhãn thực tế của trung tâm để huấn luyện/kiểm chứng chuyên cần, học phí và cảnh báo trong khóa.", ""]
     (OUTPUT / "report.md").write_text("\n".join(lines), encoding="utf-8")
 

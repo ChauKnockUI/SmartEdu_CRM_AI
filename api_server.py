@@ -26,8 +26,8 @@ import sys
 import logging
 import joblib
 import pandas as pd
-from dropout_inference import load_dropout_bundle, score_dropout
-from typing import Optional
+from dropout_inference import ACADEMIC_FEATURES, MODEL_VERSIONS, load_dropout_bundle, score_dropout
+from typing import Literal, Optional
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
@@ -81,6 +81,7 @@ _models: dict = {
     "lead_scoring"    : None,
     "lead_scoring_v2" : None,   # v2 model (CRM business features)
     "dropout_risk"    : None,
+    "dropout_academic_fallback": None,
     "dropout_risk_version": "none",
 }
 
@@ -114,16 +115,17 @@ def _load_models() -> None:
     else:
         logger.warning("Lead Scoring v2 model not found.")
 
-    # Use the public academic bundle exclusively; legacy contracts are incompatible.
-    dropout_path = os.path.join(base, "ai_models", "dropout_public", "uci_academic_bundle.pkl")
-    try:
-        _models["dropout_risk"] = load_dropout_bundle(dropout_path)
-        _models["dropout_risk_version"] = "uci_academic_public_1"
-        logger.info("Dropout academic baseline loaded.")
-    except Exception:
-        _models["dropout_risk"] = None
-        _models["dropout_risk_version"] = "none"
-        logger.exception("Cannot load public dropout bundle")
+    # Finance is the primary model; use the academic model only for unknown tuition.
+    for key, variant in [("dropout_risk", "uci_academic_finance"),
+                         ("dropout_academic_fallback", "uci_academic")]:
+        dropout_path = os.path.join(base, "ai_models", "dropout_public", f"{variant}_bundle.pkl")
+        try:
+            _models[key] = load_dropout_bundle(dropout_path, variant)
+            logger.info("Dropout %s loaded.", variant)
+        except Exception:
+            _models[key] = None
+            logger.exception("Cannot load dropout %s bundle", variant)
+    _models["dropout_risk_version"] = MODEL_VERSIONS["uci_academic_finance"] if _models["dropout_risk"] else "none"
 
 
 # ---------------------------------------------------------------------------
@@ -178,10 +180,12 @@ class LeadFeaturesV2(BaseModel):
 
 
 class DropoutFeatures(BaseModel):
-    """Academic snapshot. CRM assessment mapping is a documented domain adaptation."""
+    """CRM snapshot; unknown tuition selects the academic-only fallback."""
     Average_Score: Optional[float] = Field(..., ge=0, le=10)
     Pass_Rate: float = Field(..., ge=0, le=1)
     Not_Evaluated_Rate: float = Field(..., ge=0, le=1)
+    Has_Debt: Optional[Literal[0, 1]] = None
+    Tuition_Up_To_Date: Optional[Literal[0, 1]] = None
 
     class Config:
         extra = "forbid"
@@ -356,11 +360,15 @@ def explain_lead_v2(features: LeadFeaturesV2):
 
 @app.post("/predict-dropout", tags=["Early Warning"])
 def predict_dropout(features: DropoutFeatures):
-    """Return an academic source-model risk score; attendance/tuition rules live in CRM."""
-    bundle = _models["dropout_risk"]
+    """Use five UCI features when tuition is observed, otherwise three academic features."""
+    finance_known = features.Has_Debt is not None and features.Tuition_Up_To_Date is not None
+    bundle = _models["dropout_risk" if finance_known else "dropout_academic_fallback"]
     if bundle is None:
         raise HTTPException(status_code=503, detail="Run ai_models/train_dropout_public.py and restart the AI service.")
     try:
-        return score_dropout(bundle, features.model_dump())
+        values = features.model_dump()
+        if not finance_known:
+            values = {key: values[key] for key in ACADEMIC_FEATURES}
+        return score_dropout(bundle, values)
     except (ValueError, KeyError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

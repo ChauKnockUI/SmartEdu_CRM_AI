@@ -31,8 +31,8 @@ CSV giữ NaN để phân biệt thông tin không quan sát được; không đ
 
 Ba cấu hình được benchmark độc lập:
 
-1. `uci_academic`: ba feature học tập — baseline chính.
-2. `uci_academic_finance`: thêm hai cờ học phí — thực nghiệm riêng vì thời điểm snapshot chưa xác minh.
+1. `uci_academic`: ba feature học tập — đối chứng và dự phòng khi thiếu học phí.
+2. `uci_academic_finance`: năm feature học tập và học phí — model tích hợp khi có thông tin học phí; thời điểm snapshot tài chính UCI vẫn chưa xác minh.
 3. `oulad_assessment`: bài nộp và điểm — kết quả bổ sung, không phải dữ liệu trung tâm.
 
 Hai cấu hình UCI dùng chính xác cùng train/test và cùng fold OOF. Chọn thuật toán bằng AP OOF của train, chọn ngưỡng F2 bằng OOF; không chọn theo test. CSV chưa impute có thể đưa thẳng vào pipeline bằng cách chọn danh sách `features` trong bundle.
@@ -41,7 +41,7 @@ Hai cấu hình UCI dùng chính xác cùng train/test và cùng fold OOF. Chọ
 import joblib
 import pandas as pd
 
-bundle = joblib.load("ai_models/dropout_public/uci_academic_bundle.pkl")
+bundle = joblib.load("ai_models/dropout_public/uci_academic_finance_bundle.pkl")
 df = pd.read_csv("dataset/processed/dropout_uci_center_baseline.csv")
 probability = bundle["pipeline"].predict_proba(df[bundle["features"]])[:, 1]
 ```
@@ -62,10 +62,10 @@ Trong `ai_models/dropout_public`:
 
 Đây là baseline nghiên cứu cho học tập–tài chính. UCI không phải dữ liệu trung tâm và không chứng minh cảnh báo sớm giữa khóa. Thời điểm tài chính UCI, ngày bỏ học UCI và thời điểm công bố điểm OULAD chưa đầy đủ để xác minh tính sẵn có của mọi tín hiệu tại mốc dự báo. Chưa có chuyên cần thực hoặc xác nhận hiệu quả tại SmartCRM.
 
-`api_server.py` hiện nạp duy nhất `dropout_public/uci_academic_bundle.pkl` cho `/predict-dropout`, theo hợp đồng ba feature học tập. Không fallback model v1/v2 với hợp đồng 13 feature. Những artifact v1/v2 còn lại thuộc luồng legacy/demo, không được endpoint này nạp. Cấu hình tài chính và OULAD vẫn là thực nghiệm riêng.
+`api_server.py` nạp `dropout_public/uci_academic_finance_bundle.pkl` cho `/predict-dropout` với năm feature: `Average_Score`, `Pass_Rate`, `Not_Evaluated_Rate`, `Has_Debt`, `Tuition_Up_To_Date`. Hai cờ học phí nhận 0/1 hoặc null. Khi một cờ học phí chưa biết, endpoint dùng `uci_academic_bundle.pkl` với ba feature học tập, không điền giả học phí. Phản hồi có `includes_finance` và `model_version` để backend nhận biết đúng model. Không dùng model legacy v1/v2. OULAD vẫn là thực nghiệm riêng.
 
-Backend tính proxy từ các bài đánh giá đã đến hạn hoặc bài tập đã được chấm sớm tại trung tâm. Model chạy từ điểm hợp lệ đầu tiên, không chờ 1/3 khóa; mới có một điểm thì ghi rõ ước tính sớm. Chuyên cần/học phí tạo cảnh báo quy tắc riêng kể cả khi chưa có điểm, không cộng vào xác suất model. Xem **[DROPOUT_INTEGRATION.md](DROPOUT_INTEGRATION.md)** để biết ánh xạ, điều kiện chạy, lịch quét và thông báo.
+Backend tính proxy từ bài đánh giá hiện có và hóa đơn của đúng học viên–lớp. `Has_Debt` là còn dư nợ kể cả chưa đến hạn; `Tuition_Up_To_Date` là không có khoản còn dư nợ đã quá hạn. Thiếu hóa đơn thì hai cờ là null; còn dư nợ nhưng không có hạn thanh toán thì trạng thái đúng hạn là unknown. Không dùng hóa đơn hủy/hoàn tiền hoặc giao dịch tương lai. Đây là ánh xạ nghiệp vụ cần kiểm chứng, không khẳng định tương đương hoàn toàn với UCI. Model chạy từ điểm hợp lệ đầu tiên; chưa có điểm vẫn kiểm tra chuyên cần/học phí bằng quy tắc. Xem **[DROPOUT_INTEGRATION.md](DROPOUT_INTEGRATION.md)**.
 
-UI hiện hiển thị **điểm rủi ro tổng hợp** từ AI học tập + chuyên cần + học phí. Trọng số ban đầu là 50/30/20, phân bổ lại khi thiếu thành phần; có mức sàn để không làm mất cảnh báo quan trọng. Đây là chính sách chấm điểm 0–100, không phải một model đã học xác suất tổng hợp. Điểm AI gốc được giữ riêng và các chỉ số trong report.md vẫn chỉ đánh giá model trên dữ liệu công khai.
+UI hiển thị **điểm rủi ro tổng hợp** theo `hybrid_risk_2`: AI học tập và học phí 70% + chuyên cần 30% khi có model năm feature. Không cộng học phí thành trọng số riêng lần nữa. Khi dùng model học tập dự phòng hoặc AI không sẵn sàng, chính sách là 50/30/20 cho học tập/chuyên cần/học phí, phân bổ lại khi thiếu thành phần. Mức sàn cảnh báo vẫn được giữ. Đây là chính sách 0–100 chưa hiệu chỉnh thành xác suất. Điểm AI gốc lưu tại `model_score`; `academic_score` chỉ có khi AI dùng riêng học tập. Các chỉ số report.md chỉ đánh giá model trên dữ liệu công khai.
 
 Khi có dữ liệu trung tâm, cần snapshot điểm danh, học tập, học phí và kết quả bỏ học xảy ra sau snapshot; huấn luyện và xác nhận trên dữ liệu tương lai trước khi thay model phục vụ thực tế.

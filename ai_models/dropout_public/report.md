@@ -22,11 +22,11 @@ PR-AUC trong báo cáo được tính bằng average_precision_score; ROC-AUC kh
 
 | Cấu hình | Model | N test | Tỷ lệ dropout | ROC-AUC | PR-AUC | Recall | Precision | Brier |
 |---|---|---:|---:|---:|---:|---:|---:|---:|
-| Baseline chính: học tập | Random Forest | 695 | 38.27% | 0.9033 | 0.8979 | 86.84% | 68.34% | 0.1085 |
-| Thực nghiệm: học tập + tài chính | Logistic Regression | 695 | 38.27% | 0.9208 | 0.9209 | 87.22% | 76.07% | 0.0915 |
+| Đối chứng / dự phòng: học tập | Random Forest | 695 | 38.27% | 0.9033 | 0.8979 | 86.84% | 68.34% | 0.1085 |
+| Model tích hợp: học tập + tài chính | Logistic Regression | 695 | 38.27% | 0.9208 | 0.9209 | 87.22% | 76.07% | 0.0915 |
 | Bổ sung: bài nộp và điểm | HistGradientBoosting | 5500 | 18.64% | 0.6703 | 0.3300 | 90.73% | 20.55% | 0.2219 |
 
-### Baseline chính: học tập
+### Đối chứng / dự phòng: học tập
 
 Train/test: 2783/695. Feature: Average_Score, Pass_Rate, Not_Evaluated_Rate.
 Model: Random Forest; ngưỡng F2 OOF: 0.257437. ROC-AUC CI 95% [0.8761, 0.9323]; AP CI 95% [0.8667, 0.9254] (200 bootstrap theo sinh viên).
@@ -41,7 +41,7 @@ Baseline prior: AP=0.3827, Brier=0.2363. Brier thấp hơn là tốt hơn.
 | Random Forest | 0.9052 | 0.9033 | 0.8979 | 0.8238 |
 | HistGradientBoosting | 0.9004 | 0.9008 | 0.8971 | 0.8181 |
 
-### Thực nghiệm: học tập + tài chính
+### Model tích hợp: học tập + tài chính
 
 Train/test: 2783/695. Feature: Average_Score, Pass_Rate, Not_Evaluated_Rate, Has_Debt, Tuition_Up_To_Date.
 Model: Logistic Regression; ngưỡng F2 OOF: 0.305887. ROC-AUC CI 95% [0.8958, 0.9475]; AP CI 95% [0.8949, 0.9452] (200 bootstrap theo sinh viên).
@@ -76,10 +76,10 @@ Baseline prior: AP=0.1864, Brier=0.1516. Brier thấp hơn là tốt hơn.
 UCI: 4424 dòng gốc; loại 794 dòng chưa có nhãn Dropout/Graduate, 152 dòng không có mẫu số đăng ký hợp lệ; còn 3478 dòng.
 OULAD: 32593 lượt gốc; còn 27443 lượt tại ngày 30. Chi tiết lỗi/loại mẫu: data_audit.json; missingness: missing_rates.csv.
 
-- Baseline chính là `uci_academic_bundle.pkl`; cấu hình tài chính là thực nghiệm riêng, không tự động được chọn thay baseline vì điểm test cao hơn.
+- API dùng `uci_academic_finance_bundle.pkl` với năm feature khi có học phí; `uci_academic_bundle.pkl` là đối chứng và dự phòng khi học phí chưa quan sát được. Thuật toán của mỗi cấu hình vẫn được chọn theo AP OOF train, không theo test.
 - UCI là dữ liệu đại học cuối kỳ 1, không chứng minh hiệu quả cảnh báo tuần 3–4 hoặc hiệu quả tại trung tâm. Không có chuyên cần thực trong các CSV này.
 - Chưa xác minh thời điểm snapshot tài chính UCI và công bố điểm OULAD; kết quả không chứng minh đã loại hết leakage thời gian. Nhãn UCI là kết quả cuối cùng, không có ngày bỏ học để xác minh mọi ca đều xảy ra sau mốc kỳ 1.
 - Điểm test thuộc artifact *_evaluation.pkl (chỉ fit train); *_bundle.pkl được refit toàn bộ nguồn sau đánh giá, không có phép kiểm thử độc lập riêng.
-- API /predict-dropout dùng duy nhất uci_academic_bundle.pkl với ba feature học tập. Backend ánh xạ các bài đánh giá trung tâm thành proxy UCI; chạy từ điểm hợp lệ đầu tiên, không chờ 1/3 khóa. Chuyên cần và học phí dùng quy tắc riêng ngay cả khi chưa có điểm. Đây là tích hợp thử nghiệm; benchmark công khai không xác nhận hiệu quả tại trung tâm. Xem ../DROPOUT_INTEGRATION.md.
-- UI hiện dùng điểm rủi ro tổng hợp hybrid_risk_1: AI học tập 50%, chuyên cần 30%, học phí 20%, phân bổ lại trọng số khi thiếu dữ liệu và có mức sàn cảnh báo. Đây là quy tắc nghiệp vụ ban đầu, không phải xác suất đã hiệu chỉnh. Chỉ số benchmark ở trên thuộc model công khai, không phải chất lượng của điểm tổng hợp tại trung tâm.
+- Backend ánh xạ bài đánh giá và hóa đơn của đúng học viên–lớp thành proxy UCI; AI chạy từ điểm hợp lệ đầu tiên. Has_Debt là còn dư nợ, kể cả chưa đến hạn; Tuition_Up_To_Date là không còn khoản quá hạn. Thiếu hóa đơn hoặc thiếu hạn thanh toán cần thiết thì dùng model học tập. Các proxy tài chính không được khẳng định tương đương hoàn toàn với hai cờ UCI. Xem ../DROPOUT_INTEGRATION.md.
+- UI dùng điểm tổng hợp hybrid_risk_2: khi AI có học phí, AI 70% + chuyên cần 30%, không cộng trọng số học phí riêng. Khi AI chỉ có học tập hoặc không sẵn sàng, dùng chính sách 50/30/20 cho AI học tập/chuyên cần/học phí với trọng số phân bổ lại. Mức sàn học phí vẫn là quy tắc ưu tiên hỗ trợ. Đây không phải xác suất đã hiệu chỉnh; benchmark chỉ đánh giá model công khai.
 - Cần snapshot và nhãn thực tế của trung tâm để huấn luyện/kiểm chứng chuyên cần, học phí và cảnh báo trong khóa.
