@@ -26,7 +26,8 @@ import sys
 import logging
 import joblib
 import pandas as pd
-from typing import Optional
+from dropout_inference import ACADEMIC_FEATURES, MODEL_VERSIONS, load_dropout_bundle, score_dropout
+from typing import Literal, Optional
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
@@ -80,6 +81,7 @@ _models: dict = {
     "lead_scoring"    : None,
     "lead_scoring_v2" : None,   # v2 model (CRM business features)
     "dropout_risk"    : None,
+    "dropout_academic_fallback": None,
     "dropout_risk_version": "none",
 }
 
@@ -113,20 +115,17 @@ def _load_models() -> None:
     else:
         logger.warning("Lead Scoring v2 model not found.")
 
-    # Dropout Risk model
-    # Mô hình cảnh báo sớm học viên dựa trên chuyên cần và bài tập
-    dropout_v2_path = os.path.join(base, "ai_models", "dropout_model_v2_pipeline.pkl")
-    dropout_path    = os.path.join(base, "ai_models", "dropout_model_pipeline.pkl")
-    if os.path.exists(dropout_v2_path):
-        _models["dropout_risk"] = joblib.load(dropout_v2_path)
-        _models["dropout_risk_version"] = "v2"
-        logger.info("Dropout Risk v2 model loaded.")
-    elif os.path.exists(dropout_path):
-        _models["dropout_risk"] = joblib.load(dropout_path)
-        _models["dropout_risk_version"] = "v1"
-        logger.info("Dropout Risk legacy model loaded.")
-    else:
-        logger.warning(f"Dropout Risk model not found: {dropout_path}")
+    # Finance is the primary model; use the academic model only for unknown tuition.
+    for key, variant in [("dropout_risk", "uci_academic_finance"),
+                         ("dropout_academic_fallback", "uci_academic")]:
+        dropout_path = os.path.join(base, "ai_models", "dropout_public", f"{variant}_bundle.pkl")
+        try:
+            _models[key] = load_dropout_bundle(dropout_path, variant)
+            logger.info("Dropout %s loaded.", variant)
+        except Exception:
+            _models[key] = None
+            logger.exception("Cannot load dropout %s bundle", variant)
+    _models["dropout_risk_version"] = MODEL_VERSIONS["uci_academic_finance"] if _models["dropout_risk"] else "none"
 
 
 # ---------------------------------------------------------------------------
@@ -181,55 +180,15 @@ class LeadFeaturesV2(BaseModel):
 
 
 class DropoutFeatures(BaseModel):
-    """
-    Input features for the Dropout Risk prediction.
+    """CRM snapshot; unknown tuition selects the academic-only fallback."""
+    Average_Score: Optional[float] = Field(..., ge=0, le=10)
+    Pass_Rate: float = Field(..., ge=0, le=1)
+    Not_Evaluated_Rate: float = Field(..., ge=0, le=1)
+    Has_Debt: Optional[Literal[0, 1]] = None
+    Tuition_Up_To_Date: Optional[Literal[0, 1]] = None
 
-    These values are computed by the CRM backend from the raw attendance
-    and homework records stored per student, then passed to this endpoint.
-
-    Bối cảnh nghiệp vụ:
-    - Excused_Absences      : Số buổi vắng có báo trước/xin phép
-    - Unexcused_Absences    : Số buổi vắng không báo (dấu hiệu rủi ro cao nhất)
-    - Consecutive_Absences  : Số buổi vắng LIÊN TIẾP ở thời điểm hiện tại (còi báo đỏ)
-    - Missed_Homework_Ratio : Tỷ lệ bài tập không nộp tính đến hiện tại (0.0 = không lỡ, 1.0 = lỡ hết)
-    """
-    Attendance_Rate: float = Field(..., ge=0.0, le=1.0, example=0.72)
-    Unexcused_Absence_Count: int = Field(..., ge=0, example=3)
-    Unexcused_Absence_Rate: float = Field(..., ge=0.0, le=1.0, example=0.18)
-    Late_Count: int = Field(..., ge=0, example=2)
-    Consecutive_Unexcused_Absences: int = Field(..., ge=0, example=2)
-    Days_Since_Last_Attended: int = Field(..., ge=0, example=7)
-    Assignment_Missing_Rate: float = Field(..., ge=0.0, le=1.0, example=0.45)
-    Assignment_Late_Count: int = Field(..., ge=0, example=1)
-    Average_Score: float = Field(..., ge=0.0, le=10.0, example=6.4)
-    Score_Trend: float = Field(..., example=-1.2)
-    Has_Overdue_Invoice: int = Field(..., ge=0, le=1, example=1)
-    Days_Overdue: int = Field(..., ge=0, example=10)
-    Class_Progress_Ratio: float = Field(..., ge=0.0, le=1.0, example=0.55)
-
-
-def _dropout_reasons(features: DropoutFeatures) -> list[str]:
-    reasons: list[str] = []
-
-    if features.Consecutive_Unexcused_Absences >= 2:
-        reasons.append(f"Vang khong phep {features.Consecutive_Unexcused_Absences} buoi lien tiep")
-    if features.Unexcused_Absence_Rate >= 0.2 or features.Unexcused_Absence_Count >= 3:
-        reasons.append(f"Vang khong phep {features.Unexcused_Absence_Count} buoi")
-    if features.Assignment_Missing_Rate >= 0.35:
-        reasons.append(f"Khong nop {round(features.Assignment_Missing_Rate * 100)}% bai tap")
-    if features.Days_Since_Last_Attended >= 7:
-        reasons.append(f"Da {features.Days_Since_Last_Attended} ngay chua tham gia buoi hoc")
-    if features.Average_Score < 5.0:
-        reasons.append(f"Diem trung binh thap ({features.Average_Score:.1f}/10)")
-    if features.Score_Trend <= -1.0:
-        reasons.append("Ket qua hoc tap dang giam")
-    if features.Has_Overdue_Invoice:
-        reasons.append(f"Co hoc phi qua han {features.Days_Overdue} ngay")
-
-    if not reasons:
-        reasons.append("Khong co dau hieu rui ro lon trong du lieu hien tai")
-
-    return reasons[:4]
+    class Config:
+        extra = "forbid"
 
 
 # ---------------------------------------------------------------------------
@@ -401,61 +360,15 @@ def explain_lead_v2(features: LeadFeaturesV2):
 
 @app.post("/predict-dropout", tags=["Early Warning"])
 def predict_dropout(features: DropoutFeatures):
-    """
-    Predict the probability that a currently enrolled student will drop out
-    of their English language course before completion.
-
-    Input values should be aggregated by the CRM backend from raw per-session
-    attendance and homework records before calling this endpoint.
-
-    Returns a risk level and a recommended CRM action:
-    - **HIGH_RISK**   (>= 70%) — contact the student within 24 hours
-    - **MEDIUM_RISK** (>= 40%) — send a check-in message, monitor closely
-    - **LOW_RISK**    (<  40%) — student is on track, no action needed
-    """
-    if _models["dropout_risk"] is None:
-        raise HTTPException(
-            status_code = 503,
-            detail      = "Dropout Risk model is not loaded. Run train_dropout_model.py first.",
-        )
-
+    """Use five UCI features when tuition is observed, otherwise three academic features."""
+    finance_known = features.Has_Debt is not None and features.Tuition_Up_To_Date is not None
+    bundle = _models["dropout_risk" if finance_known else "dropout_academic_fallback"]
+    if bundle is None:
+        raise HTTPException(status_code=503, detail="Run ai_models/train_dropout_public.py and restart the AI service.")
     try:
-        input_df = pd.DataFrame([{
-            "Attendance_Rate": features.Attendance_Rate,
-            "Unexcused_Absence_Count": features.Unexcused_Absence_Count,
-            "Unexcused_Absence_Rate": features.Unexcused_Absence_Rate,
-            "Late_Count": features.Late_Count,
-            "Consecutive_Unexcused_Absences": features.Consecutive_Unexcused_Absences,
-            "Days_Since_Last_Attended": features.Days_Since_Last_Attended,
-            "Assignment_Missing_Rate": features.Assignment_Missing_Rate,
-            "Assignment_Late_Count": features.Assignment_Late_Count,
-            "Average_Score": features.Average_Score,
-            "Score_Trend": features.Score_Trend,
-            "Has_Overdue_Invoice": features.Has_Overdue_Invoice,
-            "Days_Overdue": features.Days_Overdue,
-            "Class_Progress_Ratio": features.Class_Progress_Ratio,
-        }])
-
-        probability = float(_models["dropout_risk"].predict_proba(input_df)[0][1])
-
-        if probability >= 0.70:
-            risk_level = "HIGH_RISK"
-            action     = "Contact student within 24 hours — high dropout probability."
-        elif probability >= 0.40:
-            risk_level = "MEDIUM_RISK"
-            action     = "Send a check-in message and monitor attendance next session."
-        else:
-            risk_level = "LOW_RISK"
-            action     = "Student is on track. No immediate action required."
-
-        return {
-            "model_version"       : _models["dropout_risk_version"],
-            "risk_level"         : risk_level,
-            "dropout_probability": round(probability * 100, 2),
-            "top_reasons"        : _dropout_reasons(features),
-            "action"             : action,
-        }
-
-    except Exception as e:
-        logger.error(f"Dropout prediction error: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
+        values = features.model_dump()
+        if not finance_known:
+            values = {key: values[key] for key in ACADEMIC_FEATURES}
+        return score_dropout(bundle, values)
+    except (ValueError, KeyError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
