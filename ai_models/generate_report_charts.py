@@ -5,7 +5,7 @@ SmartEdu CRM -- Generate Professional Academic & Industrial Report Charts (Engli
 
 Model: Random Forest Classifier (Trained on 9,240 Real X Education Records)
 Outputs saved to: ai_models/reports/
-  1. 1_roc_curve.png                    -- ROC-AUC Evaluation Curve (AUC = 0.91)
+  1. 1_roc_curve.png                    -- ROC-AUC Evaluation Curve
   2. 2_confusion_matrix.png             -- Confusion Matrix Heatmap (Test Set)
   3. 3_precision_recall_curve.png        -- Precision-Recall Curve & Baseline
   4. 4_feature_importance.png            -- Top 12 Influential Features (MDI / Gini)
@@ -14,6 +14,8 @@ Outputs saved to: ai_models/reports/
 """
 
 import os
+import hashlib
+import json
 import sys
 import warnings
 import numpy as np
@@ -38,8 +40,6 @@ CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 if CURRENT_DIR not in sys.path:
     sys.path.insert(0, CURRENT_DIR)
 
-from preprocessing_utils import log_transform_days  # noqa: F401
-
 BASE_DIR = os.path.dirname(CURRENT_DIR)
 DATASET_PATH = os.path.join(BASE_DIR, "dataset", "archive", "lead_scoring_real_dataset.csv")
 MODEL_PATH = os.path.join(CURRENT_DIR, "lead_scoring_v2_rf_pipeline.pkl")
@@ -51,7 +51,6 @@ plt.rcParams['font.sans-serif'] = 'DejaVu Sans'
 plt.rcParams['axes.edgecolor'] = '#CCCCCC'
 plt.rcParams['axes.linewidth'] = 0.8
 
-
 def load_model_and_test_data():
     if not os.path.exists(MODEL_PATH):
         raise FileNotFoundError(f"Model not found at: {MODEL_PATH}")
@@ -59,12 +58,20 @@ def load_model_and_test_data():
         raise FileNotFoundError(f"Dataset not found at: {DATASET_PATH}")
 
     pipeline = joblib.load(MODEL_PATH)
+    # These figures evaluate the post-contact pipeline; the report includes
+    # separate intake and routed metrics on the same held-out partition.
+    if hasattr(pipeline, "stages_"):
+        pipeline = pipeline.stages_["post_contact"]
     df = pd.read_csv(DATASET_PATH)
 
-    features = [
-        "Lead_Source", "Occupation", "Study_Purpose", "Course_Interested",
-        "Last_Engagement_Status", "Call_Attempt_Count", "Days_Since_Created"
-    ]
+    report_path = os.path.join(CURRENT_DIR, "lead_scoring_real_rf_results.json")
+    with open(report_path, encoding="utf-8") as handle:
+        report = json.load(handle)
+    for path, key in [(MODEL_PATH, "model_sha256"), (DATASET_PATH, "mapped_data_sha256")]:
+        with open(path, "rb") as handle:
+            if hashlib.sha256(handle.read()).hexdigest() != report.get(key):
+                raise ValueError("Model/data differ from the evaluation report; rerun training first")
+    features = pipeline.lead_metadata_["engineered_features"]
     X = df[features]
     y = df["Converted"]
 
@@ -76,7 +83,6 @@ def load_model_and_test_data():
     y_pred = pipeline.predict(X_test)
 
     return pipeline, X_test, y_test, y_prob, y_pred
-
 
 def plot_roc_curve(y_test, y_prob, save_path):
     fpr, tpr, _ = roc_curve(y_test, y_prob)
@@ -98,7 +104,6 @@ def plot_roc_curve(y_test, y_prob, save_path):
     plt.savefig(save_path)
     plt.close()
     print(f"  [OK] Saved: {save_path}")
-
 
 def plot_confusion_matrix(y_test, y_pred, save_path):
     cm = confusion_matrix(y_test, y_pred)
@@ -131,7 +136,6 @@ def plot_confusion_matrix(y_test, y_pred, save_path):
     plt.close()
     print(f"  [OK] Saved: {save_path}")
 
-
 def plot_precision_recall_curve(y_test, y_prob, save_path):
     precision, recall, _ = precision_recall_curve(y_test, y_prob)
     pr_auc = auc(recall, precision)
@@ -152,27 +156,21 @@ def plot_precision_recall_curve(y_test, y_prob, save_path):
     plt.close()
     print(f"  [OK] Saved: {save_path}")
 
-
 def plot_feature_importance(pipeline, save_path):
-    preprocessor = pipeline.named_steps["preprocessor"]
     calibrated_clf = pipeline.named_steps["classifier"]
+    # Each fold has its own encoder; align category names before averaging.
+    totals = {}
+    folds = calibrated_clf.calibrated_classifiers_
+    active = pipeline.lead_metadata_["active_features"]
+    for fold in folds:
+        estimator = fold.estimator
+        encoder = estimator.named_steps["preprocessor"].named_transformers_["cat"]
+        for name, value in zip(encoder.get_feature_names_out(active),
+                               estimator.named_steps["forest"].feature_importances_):
+            totals[name] = totals.get(name, 0) + float(value) / len(folds)
+    feature_names = sorted(totals)
+    importances = np.asarray([totals[name] for name in feature_names])
 
-    # Average feature importances across all 5 calibrated estimator folds
-    importances = np.mean(
-        [clf.estimator.feature_importances_ for clf in calibrated_clf.calibrated_classifiers_],
-        axis=0
-    )
-
-    feature_names = []
-    for name, trans, cols in preprocessor.transformers_:
-        if name == "cat":
-            ohe = trans.named_steps["onehot"]
-            feats = ohe.get_feature_names_out(cols)
-            feature_names.extend(feats)
-        elif name == "num":
-            feature_names.extend(cols)
-
-    # Professional English feature descriptions
     english_labels = {
         "Last_Engagement_Status_positive_interaction": "Engagement: Positive Interaction",
         "Last_Engagement_Status_rejected": "Engagement: Rejected / No Intent",
@@ -220,7 +218,6 @@ def plot_feature_importance(pipeline, save_path):
     plt.close()
     print(f"  [OK] Saved: {save_path}")
 
-
 def plot_calibration_curve(y_test, y_prob, save_path):
     prob_true, prob_pred = calibration_curve(y_test, y_prob, n_bins=10)
     brier = brier_score_loss(y_test, y_prob)
@@ -239,7 +236,6 @@ def plot_calibration_curve(y_test, y_prob, save_path):
     plt.savefig(save_path)
     plt.close()
     print(f"  [OK] Saved: {save_path}")
-
 
 def plot_summary_dashboard(y_test, y_prob, y_pred, pipeline, save_path):
     fig, axes = plt.subplots(2, 2, figsize=(16, 13), dpi=300)
@@ -263,7 +259,7 @@ def plot_summary_dashboard(y_test, y_prob, y_pred, pipeline, save_path):
     ax = axes[0, 1]
     cm = confusion_matrix(y_test, y_pred)
     ax.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues)
-    ax.set_title("B. CONFUSION MATRIX (TEST SET, N=1,848)", fontsize=13, fontweight="bold")
+    ax.set_title(f"B. CONFUSION MATRIX (TEST SET, N={len(y_test):,})", fontsize=13, fontweight="bold")
     classes = ["Not Converted", "Converted"]
     ax.set_xticks([0, 1])
     ax.set_yticks([0, 1])
@@ -306,7 +302,6 @@ def plot_summary_dashboard(y_test, y_prob, y_pred, pipeline, save_path):
     plt.close()
     print(f"  [OK] Saved: {save_path}")
 
-
 def main():
     print("=" * 70)
     print(" GENERATING LEAD SCORING EVALUATION CHARTS (ENGLISH)")
@@ -315,6 +310,7 @@ def main():
     pipeline, X_test, y_test, y_prob, y_pred = load_model_and_test_data()
 
     print(f"[*] Test Set: {len(X_test)} samples")
+    print("    Stage: post-contact reference model (public data, not CRM validation)")
     print(f"    - Accuracy : {accuracy_score(y_test, y_pred):.2%}")
     print(f"    - F1-Score : {f1_score(y_test, y_pred):.4f}")
     print(f"    - Precision: {precision_score(y_test, y_pred):.4f}")
@@ -332,7 +328,6 @@ def main():
     print(f" COMPLETE! All 6 English figures (300 DPI) are saved at:")
     print(f" >> {OUTPUT_DIR}")
     print("=" * 70)
-
 
 if __name__ == "__main__":
     main()

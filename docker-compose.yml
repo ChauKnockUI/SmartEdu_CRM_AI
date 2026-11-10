@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   smartedu-ai:
     build:
@@ -12,7 +10,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
     volumes:
-      # Mount thư mục ai_models: Khi bạn train lại file .pkl thì Docker tự nhận ngay mà không cần mất công rebuild lại image
+      # Restart the service after replacing a model artifact.
       - ./ai_models:/app/ai_models
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]

@@ -1,0 +1,23 @@
+{
+  "UCI": {
+    "raw_rows": 4424,
+    "raw_identical_rows": 0,
+    "excluded_unresolved_target": 794,
+    "excluded_invalid_or_zero_enrollment": 152,
+    "invalid_approved_counts": 0,
+    "invalid_without_evaluation_counts": 0,
+    "invalid_grade": 0,
+    "invalid_Has_Debt": 0,
+    "invalid_Tuition_Up_To_Date": 0,
+    "output_rows": 3478
+  },
+  "OULAD": {
+    "raw_rows": 32593,
+    "unmatched_registration": 0,
+    "excluded_not_registered_by_cutoff": 61,
+    "excluded_withdrawn_by_cutoff": 5089,
+    "invalid_score": 0,
+    "excluded_submissions_after_cutoff": 147390,
+    "output_rows": 27443
+  }
+}

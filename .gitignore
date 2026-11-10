@@ -19,6 +19,5 @@ ai_models/output.log
 # Jupyter Notebook checkpoints
 .ipynb_checkpoints
 
-# Nếu sau này file Data phình to trên 100MB, bỏ comment 2 dòng dưới đây:
-# dataset/
-# *.pkl
+# Dữ liệu thô OULAD vượt quá 100MB (file studentVle.csv 422MB)
+dataset/archive/dropout_data_OULAD/

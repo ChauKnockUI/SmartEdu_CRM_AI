@@ -1,0 +1,110 @@
+﻿{
+    "replacement":  "ai_models/DROPOUT_README.md",
+    "preserved":  [
+                      "Raw UCI/OULAD data",
+                      "API v1/v2 model artifacts and associated scripts/demo data",
+                      "All lead-scoring assets"
+                  ],
+    "removed":  [
+                    {
+                        "path":  "ai_models/dropout_benchmark_results.json",
+                        "directory":  false,
+                        "reason":  "Superseded pooled dropout pipeline/artifact; replaced by train_dropout_public.py and dropout_public/report.md"
+                    },
+                    {
+                        "path":  "ai_models/dropout_benchmark_summary.md",
+                        "directory":  false,
+                        "reason":  "Superseded pooled dropout pipeline/artifact; replaced by train_dropout_public.py and dropout_public/report.md"
+                    },
+                    {
+                        "path":  "ai_models/dropout_benchmark_results_v3.json",
+                        "directory":  false,
+                        "reason":  "Superseded pooled dropout pipeline/artifact; replaced by train_dropout_public.py and dropout_public/report.md"
+                    },
+                    {
+                        "path":  "ai_models/dropout_benchmark_summary_v3.md",
+                        "directory":  false,
+                        "reason":  "Superseded pooled dropout pipeline/artifact; replaced by train_dropout_public.py and dropout_public/report.md"
+                    },
+                    {
+                        "path":  "ai_models/dropout_model_v3_bundle.pkl",
+                        "directory":  false,
+                        "reason":  "Superseded pooled dropout pipeline/artifact; replaced by train_dropout_public.py and dropout_public/report.md"
+                    },
+                    {
+                        "path":  "ai_models/dropout_model_v3_evaluation.pkl",
+                        "directory":  false,
+                        "reason":  "Superseded pooled dropout pipeline/artifact; replaced by train_dropout_public.py and dropout_public/report.md"
+                    },
+                    {
+                        "path":  "ai_models/dropout_real_rf_results.json",
+                        "directory":  false,
+                        "reason":  "Superseded pooled dropout pipeline/artifact; replaced by train_dropout_public.py and dropout_public/report.md"
+                    },
+                    {
+                        "path":  "ai_models/generate_dropout_report_charts.py",
+                        "directory":  false,
+                        "reason":  "Superseded pooled dropout pipeline/artifact; replaced by train_dropout_public.py and dropout_public/report.md"
+                    },
+                    {
+                        "path":  "ai_models/run_dropout_v3_enhanced_evaluation.py",
+                        "directory":  false,
+                        "reason":  "Superseded pooled dropout pipeline/artifact; replaced by train_dropout_public.py and dropout_public/report.md"
+                    },
+                    {
+                        "path":  "ai_models/process_and_train_real_dropout.py",
+                        "directory":  false,
+                        "reason":  "Superseded pooled dropout pipeline/artifact; replaced by train_dropout_public.py and dropout_public/report.md"
+                    },
+                    {
+                        "path":  "ai_models/dropout_v3_common.py",
+                        "directory":  false,
+                        "reason":  "Superseded pooled dropout pipeline/artifact; replaced by train_dropout_public.py and dropout_public/report.md"
+                    },
+                    {
+                        "path":  "ai_models/dropout_v3_evaluation_notes.md",
+                        "directory":  false,
+                        "reason":  "Superseded pooled dropout pipeline/artifact; replaced by train_dropout_public.py and dropout_public/report.md"
+                    },
+                    {
+                        "path":  "ai_models/test_dropout_v3_evaluation.py",
+                        "directory":  false,
+                        "reason":  "Superseded pooled dropout pipeline/artifact; replaced by train_dropout_public.py and dropout_public/report.md"
+                    },
+                    {
+                        "path":  "ai_models/BAO_CAO_HUAN_LUYEN_DROPOUT_MODEL_V3.md",
+                        "directory":  false,
+                        "reason":  "Superseded pooled dropout pipeline/artifact; replaced by train_dropout_public.py and dropout_public/report.md"
+                    },
+                    {
+                        "path":  "ai_models/Dropout_Risk_Model_v3_Training.ipynb",
+                        "directory":  false,
+                        "reason":  "Superseded pooled dropout pipeline/artifact; replaced by train_dropout_public.py and dropout_public/report.md"
+                    },
+                    {
+                        "path":  "ai_models/Dropout_Risk_Model_v3_Training.html",
+                        "directory":  false,
+                        "reason":  "Superseded pooled dropout pipeline/artifact; replaced by train_dropout_public.py and dropout_public/report.md"
+                    },
+                    {
+                        "path":  "dataset/archive/dropout_real_final_dataset.csv",
+                        "directory":  false,
+                        "reason":  "Superseded pooled dropout pipeline/artifact; replaced by train_dropout_public.py and dropout_public/report.md"
+                    },
+                    {
+                        "path":  "dataset/archive/dropout_real_final_dataset_v3.csv",
+                        "directory":  false,
+                        "reason":  "Superseded pooled dropout pipeline/artifact; replaced by train_dropout_public.py and dropout_public/report.md"
+                    },
+                    {
+                        "path":  "ai_models/reports",
+                        "directory":  true,
+                        "reason":  "Superseded pooled dropout pipeline/artifact; replaced by train_dropout_public.py and dropout_public/report.md"
+                    },
+                    {
+                        "path":  "ai_models/reports_v3",
+                        "directory":  true,
+                        "reason":  "Superseded pooled dropout pipeline/artifact; replaced by train_dropout_public.py and dropout_public/report.md"
+                    }
+                ]
+}

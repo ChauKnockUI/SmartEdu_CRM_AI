@@ -1,388 +1,252 @@
-"""
-train_real_lead_scoring_rf.py
-------------------------------
-SmartEdu CRM -- Train Random Forest Lead Scoring on REAL X Education Dataset (9,240 rows)
+"""Build aligned public/CRM features and select a calibrated RF on train-only CV.
 
-Workflow:
-  1. Load real raw dataset: Lead Scoring.csv (9,240 rows) from X Education (Kaggle).
-  2. Perform Feature Mapping & Engineering into the 7 CRM business features:
-       - Lead_Source (categorical)
-       - Occupation (categorical)
-       - Study_Purpose (categorical)
-       - Course_Interested (categorical)
-       - Call_Attempt_Count (numeric)
-       - Last_Engagement_Status (categorical)
-       - Days_Since_Created (numeric)
-     Target: Converted (0 or 1, real ground truth)
-  3. Save the mapped real dataset to dataset/archive/lead_scoring_real_dataset.csv
-  4. Train Random Forest Classifier with CalibratedClassifierCV (isotonic) & 5-fold CV.
-  5. Compare performance against the synthetic baseline model.
-  6. Export the retrained pipeline to lead_scoring_v2_rf_pipeline.pkl.
+Run: python ai_models/train_real_lead_scoring_rf.py
+The source is approximate; source-domain metrics do not establish CRM accuracy.
 """
-
+import hashlib
+import json
 import os
 import sys
-import json
-import warnings
-import numpy as np
-import pandas as pd
+from datetime import datetime, timezone
+from pathlib import Path
+
 import joblib
-
-if sys.platform == "win32":
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-
-warnings.filterwarnings("ignore")
-
-from sklearn.model_selection import train_test_split, StratifiedKFold, cross_validate
-from sklearn.pipeline import Pipeline
-from sklearn.compose import ColumnTransformer
-from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import OneHotEncoder, StandardScaler, FunctionTransformer
-from sklearn.ensemble import RandomForestClassifier
+import pandas as pd
 from sklearn.calibration import CalibratedClassifierCV
-from sklearn.metrics import (
-    accuracy_score, classification_report, confusion_matrix,
-    f1_score, roc_auc_score, precision_score, recall_score,
-    brier_score_loss
-)
+from sklearn.compose import ColumnTransformer
+from sklearn.dummy import DummyClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import (accuracy_score, average_precision_score, brier_score_loss,
+    confusion_matrix, f1_score, precision_score, recall_score, roc_auc_score)
+from sklearn.model_selection import StratifiedKFold, cross_validate, train_test_split
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import FunctionTransformer, OneHotEncoder
 
-# Ensure ai_models is in sys.path
-CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-if CURRENT_DIR not in sys.path:
-    sys.path.insert(0, CURRENT_DIR)
+CURRENT_DIR = Path(__file__).resolve().parent
+if str(CURRENT_DIR) not in sys.path:
+    sys.path.insert(0, str(CURRENT_DIR))
+from lead_contract import (CORE_FEATURES, FEATURES, MODEL_VERSION,
+                           engineer_lead_features, engineer_source_features)
+from staged_lead_scoring import StagedLeadModel
 
-from preprocessing_utils import log_transform_days
-
-# Paths
-BASE_DIR = os.path.dirname(CURRENT_DIR)
-RAW_DATA_PATH = os.path.join(BASE_DIR, "dataset", "archive", "Lead Scoring.csv")
-REAL_DATASET_PATH = os.path.join(BASE_DIR, "dataset", "archive", "lead_scoring_real_dataset.csv")
-SYNTHETIC_DATASET_PATH = os.path.join(BASE_DIR, "dataset", "archive", "lead_scoring_v2_dataset.csv")
-OUTPUT_MODEL_PATH = os.path.join(CURRENT_DIR, "lead_scoring_v2_rf_pipeline.pkl")
-RESULT_JSON_PATH = os.path.join(CURRENT_DIR, "lead_scoring_real_rf_results.json")
-
-CATEGORICAL_FEATURES = [
-    "Lead_Source",
-    "Occupation",
-    "Study_Purpose",
-    "Course_Interested",
-    "Last_Engagement_Status",
-]
-NUMERIC_FEATURES = [
-    "Call_Attempt_Count",
-    "Days_Since_Created",
-]
+BASE_DIR = CURRENT_DIR.parent
+RAW_DATA_PATH = BASE_DIR / "dataset/archive/Lead Scoring.csv"
+REAL_DATASET_PATH = BASE_DIR / "dataset/archive/lead_scoring_real_dataset.csv"
+OUTPUT_MODEL_PATH = CURRENT_DIR / "lead_scoring_v2_rf_pipeline.pkl"
+RESULT_JSON_PATH = CURRENT_DIR / "lead_scoring_real_rf_results.json"
+REPORT_PATH = CURRENT_DIR / "lead_scoring_report.md"
 TARGET = "Converted"
-ALL_FEATURES = CATEGORICAL_FEATURES + NUMERIC_FEATURES
+CANDIDATES = {
+    "intake": CORE_FEATURES,
+    "with_engagement": CORE_FEATURES + ["Engagement_Group"],
+}
 
 
-def map_and_clean_real_data(raw_path: str) -> pd.DataFrame:
-    """Map the 37 raw X Education features to 7 CRM business features."""
-    print(f"\n[*] Loading raw dataset from: {raw_path}")
-    raw_df = pd.read_csv(raw_path)
-    print(f"    Raw records count: {len(raw_df)}")
-
-    # Replace string 'Select' with NaN
-    df = raw_df.replace("Select", np.nan).copy()
-
-    # Drop records without target
-    df = df.dropna(subset=["Converted"]).copy()
-    df["Converted"] = df["Converted"].astype(int)
-
-    # 1. Lead_Source
-    def map_source(val):
-        if pd.isna(val):
-            return "other"
-        v = str(val).lower()
-        if "google" in v:
-            return "google_ads"
-        if "facebook" in v or "social" in v:
-            return "facebook"
-        if "refer" in v or "welingak" in v:
-            return "referral"
-        if "organic" in v or "direct" in v:
-            return "website_organic"
-        if "olark" in v or "chat" in v:
-            return "facebook"  # inbound chat/messaging
-        if "tiktok" in v:
-            return "tiktok"
-        return "other"
-
-    df["Lead_Source"] = df["Lead Source"].apply(map_source)
-
-    # 2. Occupation
-    def map_occupation(val):
-        if pd.isna(val):
-            return "unemployed"
-        v = str(val).lower()
-        if "student" in v:
-            return "student_y3_y4"
-        if "working" in v or "business" in v:
-            return "working_professional"
-        if "unemployed" in v:
-            return "unemployed"
-        return "parent_enrolling"
-
-    df["Occupation"] = df["What is your current occupation"].apply(map_occupation)
-
-    # 3. Last_Engagement_Status
-    def map_engagement(row):
-        act = str(row.get("Last Activity", "")).lower()
-        notable = str(row.get("Last Notable Activity", "")).lower()
-        tags = str(row.get("Tags", "")).lower()
-        combined = f"{act} {notable} {tags}"
-
-        if any(k in combined for k in ["closed by", "lost to", "diploma holder", "invalid", "wrong", "shall take"]):
-            return "rejected"
-        if any(k in combined for k in ["unreachable", "bounced", "switched off", "unsubscribed"]):
-            return "not_answering"
-        if any(k in combined for k in ["ringing", "busy"]):
-            return "busy_call_back"
-        if any(k in combined for k in ["interested in other", "will revert", "in confusion"]):
-            return "interested_need_time"
-        if any(k in combined for k in ["sms sent", "email opened", "phone conversation", "converted to lead", "chat"]):
-            return "positive_interaction"
-        return "positive_interaction" if row["Converted"] == 1 else "not_answering"
-
-    df["Last_Engagement_Status"] = df.apply(map_engagement, axis=1)
-
-    # 4. Call_Attempt_Count (TotalVisits -> 0 to 6 attempts)
-    visits = pd.to_numeric(df["TotalVisits"], errors="coerce").fillna(1)
-    df["Call_Attempt_Count"] = visits.clip(0, 6).round().astype(int)
-
-    # 5. Days_Since_Created
-    # In X Education: Total Time Spent on Website indicates warmth.
-    # Higher time spent & higher visits -> freshly active lead (lower Days_Since_Created).
-    # Inactive leads -> higher Days_Since_Created (stale).
-    time_spent = pd.to_numeric(df["Total Time Spent on Website"], errors="coerce").fillna(0)
-    # Normalize inverted scale: 1 (very fresh/active) to 30 (stale)
-    max_time = time_spent.max() if time_spent.max() > 0 else 1.0
-    freshness = 1.0 - (time_spent / max_time)
-    df["Days_Since_Created"] = (freshness * 28 + 1).round().astype(int).clip(1, 30)
-
-    # 6. Study_Purpose & Course_Interested
-    # Map based on Specialization and career intent
-    np.random.seed(42)
-    def map_purpose(row):
-        spec = str(row.get("Specialization", "")).lower()
-        matter = str(row.get("What matters most to you in choosing a course", "")).lower()
-        if "career" in matter or any(k in spec for k in ["management", "business", "finance"]):
-            return "career_advancement"
-        if any(k in spec for k in ["international", "travel"]):
-            return "study_abroad"
-        return np.random.choice(["pass_exam", "hobby", "company_training"], p=[0.5, 0.3, 0.2])
-
-    df["Study_Purpose"] = df.apply(map_purpose, axis=1)
-
-    def map_course(row):
-        spec = str(row.get("Specialization", "")).lower()
-        if any(k in spec for k in ["it", "e-commerce", "analytics"]):
-            return np.random.choice(["data_analysis", "frontend", "backend_nodejs"])
-        if any(k in spec for k in ["international", "travel"]):
-            return "ielts"
-        if any(k in spec for k in ["banking", "finance", "business"]):
-            return np.random.choice(["toeic", "communication_english"])
-        return np.random.choice(
-            ["ielts", "toeic", "communication_english", "data_analysis", "frontend"],
-            p=[0.3, 0.25, 0.25, 0.1, 0.1]
-        )
-
-    df["Course_Interested"] = df.apply(map_course, axis=1)
-
-    # Keep only the target 7 features + Converted
-    final_df = df[ALL_FEATURES + [TARGET]].dropna()
-    print(f"    Mapped real dataset ready: {len(final_df)} records")
-    print(f"    Target conversion rate: {final_df[TARGET].mean():.2%}")
-    return final_df
+def map_and_clean_real_data(raw_path):
+    raw = pd.read_csv(raw_path)
+    required = {"Lead Source", "What is your current occupation", TARGET,
+                "What matters most to you in choosing a course",
+                "Last Activity", "Last Notable Activity"}
+    missing = required - set(raw.columns)
+    if missing:
+        raise ValueError(f"Missing source columns: {sorted(missing)}")
+    raw = raw.dropna(subset=[TARGET]).copy()
+    target = pd.to_numeric(raw[TARGET], errors="raise")
+    if not target.isin([0, 1]).all():
+        raise ValueError("Converted must contain binary 0/1 labels")
+    for identifier in ["Prospect ID", "Lead Number"]:
+        if identifier in raw and (raw[identifier].isna().any() or raw[identifier].duplicated().any()):
+            raise ValueError(f"Missing or duplicate {identifier}; resolve identities before splitting")
+    mapped = engineer_source_features(raw)
+    mapped[TARGET] = target.astype(int)
+    return mapped.reset_index(drop=True)
 
 
-def build_rf_pipeline() -> Pipeline:
-    """Build preprocessing and calibrated Random Forest pipeline."""
-    numeric_transformer = Pipeline(steps=[
-        ("imputer", SimpleImputer(strategy="median")),
-        ("log_transform", FunctionTransformer(func=log_transform_days, validate=False)),
-        ("scaler", StandardScaler()),
+def build_rf_pipeline(features=None, n_estimators=250):
+    features = list(FEATURES if features is None else features)
+    # Fit the encoder separately within EACH inner calibration training fold.
+    estimator = Pipeline([
+        ("preprocessor", ColumnTransformer([
+            ("cat", OneHotEncoder(handle_unknown="ignore", sparse_output=False), features),
+        ])),
+        ("forest", RandomForestClassifier(
+            n_estimators=n_estimators, max_depth=14, min_samples_split=8,
+            min_samples_leaf=4, class_weight="balanced", random_state=42, n_jobs=1,
+        )),
     ])
-
-    categorical_transformer = Pipeline(steps=[
-        ("imputer", SimpleImputer(strategy="constant", fill_value="Unknown")),
-        ("onehot", OneHotEncoder(handle_unknown="ignore", sparse_output=False)),
-    ])
-
-    preprocessor = ColumnTransformer(
-        transformers=[
-            ("num", numeric_transformer, NUMERIC_FEATURES),
-            ("cat", categorical_transformer, CATEGORICAL_FEATURES),
-        ]
-    )
-
-    base_rf = RandomForestClassifier(
-        n_estimators=250,
-        max_depth=14,
-        min_samples_split=8,
-        min_samples_leaf=4,
-        class_weight="balanced",
-        random_state=42,
-        n_jobs=-1,
-    )
-
-    calibrated_rf = CalibratedClassifierCV(base_rf, method="isotonic", cv=5)
-
-    return Pipeline(steps=[
-        ("preprocessor", preprocessor),
-        ("classifier", calibrated_rf),
+    return Pipeline([
+        ("engineer", FunctionTransformer(engineer_lead_features, validate=False)),
+        ("classifier", CalibratedClassifierCV(
+            estimator, method="isotonic",
+            cv=StratifiedKFold(n_splits=5, shuffle=True, random_state=42), n_jobs=1,
+        )),
     ])
 
 
-def evaluate_model(pipeline: Pipeline, X_test: pd.DataFrame, y_test: pd.Series) -> dict:
-    y_pred = pipeline.predict(X_test)
-    y_prob = pipeline.predict_proba(X_test)[:, 1]
+def evaluate_model(pipeline, X_test, y_test):
+    return evaluate_probabilities(y_test, pipeline.predict_proba(X_test)[:, 1])
 
-    acc = accuracy_score(y_test, y_pred)
-    f1 = f1_score(y_test, y_pred)
-    roc = roc_auc_score(y_test, y_prob)
-    prec = precision_score(y_test, y_pred)
-    rec = recall_score(y_test, y_pred)
-    brier = brier_score_loss(y_test, y_prob)
-    cm = confusion_matrix(y_test, y_pred).tolist()
 
+def evaluate_probabilities(y, probabilities, threshold=0.5):
+    predicted = probabilities >= threshold
     return {
-        "accuracy": float(acc),
-        "f1_score": float(f1),
-        "roc_auc": float(roc),
-        "precision": float(prec),
-        "recall": float(rec),
-        "brier_score": float(brier),
-        "confusion_matrix": cm,
+        "accuracy": float(accuracy_score(y, predicted)),
+        "f1_score": float(f1_score(y, predicted, zero_division=0)),
+        "roc_auc": float(roc_auc_score(y, probabilities)),
+        "pr_auc": float(average_precision_score(y, probabilities)),
+        "precision": float(precision_score(y, predicted, zero_division=0)),
+        "recall": float(recall_score(y, predicted, zero_division=0)),
+        "brier_score": float(brier_score_loss(y, probabilities)),
+        "confusion_matrix": confusion_matrix(y, predicted, labels=[0, 1]).tolist(),
     }
+
+
+def select_candidate(results, minimum_gain=0.005):
+    """Prefer fewer proxies unless the train-only mean AUC improves by 0.005."""
+    selected = next(iter(results))
+    for name in list(results)[1:]:
+        if results[name]["mean"]["roc_auc"] > results[selected]["mean"]["roc_auc"] + minimum_gain:
+            selected = name
+    return selected
+
+
+def write_markdown(report):
+    metadata = report["metadata"]
+    metrics = report["real_model_test_metrics"]
+    prior = report["same_test_prior_baseline_metrics"]
+    lines = [
+        "# Lead conversion: aligned feature evaluation", "",
+        f"Model: `{MODEL_VERSION}`. Source: X Education, {report['dataset_real_records']:,} records.", "",
+        "Public source and CRM records are processed into a shared, coarser feature vocabulary.",
+        "No target-derived fallback, random assignment, or full-dataset fitted statistic is used.", "",
+        "| Feature | Public source | CRM |", "|---|---|---|",
+        "| Source_Group | Lead Source grouped into search/social/referral/website/other/unknown | Same grouping of lead_source |",
+        "| Occupation_Group | Student/working/unemployed/other/unknown | Both student year groups merge into student |",
+        "| Goal_Group | Explicit career motivation; other source answers unknown | career/company -> career; exam/study abroad -> academic; hobby -> personal |",
+        "| Engagement_Group | Recorded email/phone/chat response -> active; unreachable/bounced -> unreachable; otherwise unknown | Explicit contact result; used only after actual contact |", "",
+        "Initial model uses Source_Group, Occupation_Group and Goal_Group only.",
+        "After actual contact, the response model may add Engagement_Group.",
+        "A contact without a recorded result retains the intake model until response evidence exists.",
+        "TotalVisits and call counts are not features of either public-data model.", "",
+        "Course choice and lead age are excluded: specialization is not a course, and website seconds are not lead age.",
+        "Tags are excluded; SMS Sent and Converted to Lead do not establish customer response.",
+        "Missing occupation is unknown, not unemployed. No student year is inferred.", "",
+        "## Model selection", "",
+        "Split 80/20 with stratification and seed 42 before model selection.",
+        "All candidates use the same five CV folds within the 80% training partition.",
+        "Every calibration fold fits its own encoder and forest.",
+        "Prefer fewer proxies unless an added candidate improves mean CV ROC-AUC by more than 0.005.",
+        "The test set is not used to select features or tune thresholds.", "",
+        "| Candidate | Train CV AUC | Train CV F1 |", "|---|---:|---:|",
+    ]
+    for name, result in report["candidate_cv"].items():
+        lines.append(f"| {name} | {result['mean']['roc_auc']:.4f} | {result['mean']['f1']:.4f} |")
+    lines += ["", f"Selected: `{metadata['selected_candidate']}`.",
+              f"Stage feature sets: `{metadata['stage_features']}`.", "",
+              "## Stage evaluation on the same public held-out partition", "",
+              "These are source-domain comparisons, not evidence of performance on new CRM leads.",
+              "Source data has no contact chronology; routed evaluation uses recorded response availability as a proxy.", "",
+              "| Model | Accuracy | ROC-AUC | PR-AUC | Brier |", "|---|---:|---:|---:|---:|",
+              *[f"| {stage} | {values['accuracy']:.4f} | {values['roc_auc']:.4f} | {values['pr_auc']:.4f} | {values['brier_score']:.4f} |"
+                for stage, values in report['stage_test_metrics'].items()], "",
+              "## Held-out test", "",
+              f"Train: {metadata['split']['train_records']:,}; test: {metadata['split']['test_records']:,}.",
+              "Prior baseline uses exactly the same train/test split.", "",
+              "| Metric | Selected RF | Prior baseline |", "|---|---:|---:|",
+    ]
+    for name in ["accuracy", "precision", "recall", "f1_score", "roc_auc", "pr_auc", "brier_score"]:
+        lines.append(f"| {name} | {metrics[name]:.4f} | {prior[name]:.4f} |")
+    lines += ["", f"Confusion matrix [TN, FP; FN, TP]: `{metrics['confusion_matrix']}`.", "",
+              "HOT >= 0.80; WARM >= 0.50; binary conversion prediction >= 0.50.",
+              "Threshold analysis is descriptive; thresholds are not tuned on test outcomes.", "",
+              "## Limits", "", *[f"- {v}" for v in report["limitations"]], "",
+              "## Next data collection", "",
+              "Export lead ID, scoring-time snapshots, real features, conversion timestamp and an explicit outcome horizon.",
+              "Keep snapshots of one lead in the same partition and use later dates for final temporal testing.",
+              "Incomplete outcome windows must not be labeled as negative.", "",
+              "The artifact bundles two trained pipelines; stage routing and SHAP use the same selected pipeline.", ""]
+    REPORT_PATH.write_text("\n".join(lines), encoding="utf-8")
 
 
 def main():
-    print("=" * 70)
-    print(" SmartEdu CRM -- Retraining Random Forest Lead Scoring with REAL DATA")
-    print("=" * 70)
-
-    # 1. Map and prepare real dataset
-    real_df = map_and_clean_real_data(RAW_DATA_PATH)
-    real_df.to_csv(REAL_DATASET_PATH, index=False)
-    print(f"[*] Saved mapped real dataset to: {REAL_DATASET_PATH}")
-
-    # 2. Split Real Dataset into Train / Test (80 / 20)
-    X = real_df[ALL_FEATURES]
-    y = real_df[TARGET]
+    if sys.platform == "win32":
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    data = map_and_clean_real_data(RAW_DATA_PATH)
+    X, y = data[FEATURES], data[TARGET]
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
+        X, y, test_size=0.2, random_state=42, stratify=y,
     )
-    print(f"[*] Data split: Train = {len(X_train)} samples, Test = {len(X_test)} samples")
-
-    # 3. 5-Fold Stratified Cross Validation on Real Data
-    print("\n[*] Running 5-Fold Cross Validation on Real Dataset...")
-    rf_pipeline = build_rf_pipeline()
-    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-    scoring = ["accuracy", "f1", "roc_auc", "precision", "recall"]
-    cv_res = cross_validate(rf_pipeline, X, y, cv=cv, scoring=scoring, n_jobs=-1)
-
-    cv_summary = {s: float(cv_res[f"test_{s}"].mean()) for s in scoring}
-    print("    Cross Validation Means:")
-    for metric, score in cv_summary.items():
-        print(f"      - {metric.upper():<10}: {score:.4f} ({score * 100:.2f}%)")
-
-    # 4. Train on X_train, evaluate on X_test
-    print("\n[*] Fitting pipeline on X_train...")
-    rf_pipeline.fit(X_train, y_train)
-
-    real_eval = evaluate_model(rf_pipeline, X_test, y_test)
-    print("\n" + "=" * 70)
-    print(" REAL DATASET -- TEST SET EVALUATION (Random Forest)")
-    print("=" * 70)
-    print(f"  Accuracy  : {real_eval['accuracy'] * 100:.2f}%")
-    print(f"  F1-Score  : {real_eval['f1_score']:.4f}")
-    print(f"  ROC-AUC   : {real_eval['roc_auc']:.4f}")
-    print(f"  Precision : {real_eval['precision']:.4f}")
-    print(f"  Recall    : {real_eval['recall']:.4f}")
-    print(f"  Brier Loss: {real_eval['brier_score']:.4f} (Calibrated probability loss)")
-    cm = real_eval["confusion_matrix"]
-    print(f"  Confusion Matrix: TN={cm[0][0]}, FP={cm[0][1]}, FN={cm[1][0]}, TP={cm[1][1]}")
-
-    # 5. Baseline Evaluation: Train RF on Synthetic Dataset to compare
-    synthetic_eval = None
-    if os.path.exists(SYNTHETIC_DATASET_PATH):
-        print("\n[*] Evaluating baseline on Synthetic dataset (5,000 samples)...")
-        syn_df = pd.read_csv(SYNTHETIC_DATASET_PATH)
-        X_syn = syn_df[ALL_FEATURES]
-        y_syn = syn_df[TARGET]
-        X_syn_tr, X_syn_te, y_syn_tr, y_syn_te = train_test_split(
-            X_syn, y_syn, test_size=0.2, random_state=42, stratify=y_syn
+    print(f"Train={len(X_train)}; held-out test={len(X_test)}", flush=True)
+    scores = ["accuracy", "f1", "roc_auc", "precision", "recall"]
+    candidates = {}
+    for name, features in CANDIDATES.items():
+        print(f"Train-only CV: {name}, {features}", flush=True)
+        results = cross_validate(
+            build_rf_pipeline(features), X_train, y_train,
+            cv=StratifiedKFold(n_splits=5, shuffle=True, random_state=42),
+            scoring=scores, n_jobs=1, error_score="raise",
         )
-        syn_pipeline = build_rf_pipeline()
-        syn_pipeline.fit(X_syn_tr, y_syn_tr)
-        synthetic_eval = evaluate_model(syn_pipeline, X_syn_te, y_syn_te)
-
-    # 6. Sanity Scenarios Check
-    print("\n[*] Testing Business Scenarios with the Retrained Model:")
-    scenarios = [
-        {
-            "name": "HOT Lead (Referral, SV nam 3/4, IELTS, Positive interaction, 2 ngay)",
-            "data": {
-                "Lead_Source": "referral",
-                "Occupation": "student_y3_y4",
-                "Study_Purpose": "study_abroad",
-                "Course_Interested": "ielts",
-                "Call_Attempt_Count": 2,
-                "Last_Engagement_Status": "positive_interaction",
-                "Days_Since_Created": 2,
-            }
-        },
-        {
-            "name": "WARM Lead (Google Ads, Nguoi di lam, TOEIC, Can suy nghi them, 5 ngay)",
-            "data": {
-                "Lead_Source": "google_ads",
-                "Occupation": "working_professional",
-                "Study_Purpose": "career_advancement",
-                "Course_Interested": "toeic",
-                "Call_Attempt_Count": 3,
-                "Last_Engagement_Status": "interested_need_time",
-                "Days_Since_Created": 5,
-            }
-        },
-        {
-            "name": "COLD Lead (Facebook, Khong ro nghe nghiep, Goi 5 lan khong bat may, 25 ngay)",
-            "data": {
-                "Lead_Source": "facebook",
-                "Occupation": "unemployed",
-                "Study_Purpose": "hobby",
-                "Course_Interested": "communication_english",
-                "Call_Attempt_Count": 5,
-                "Last_Engagement_Status": "not_answering",
-                "Days_Since_Created": 25,
-            }
+        candidates[name] = {
+            "features": features,
+            "mean": {s: float(results[f"test_{s}"].mean()) for s in scores},
+            "std": {s: float(results[f"test_{s}"].std()) for s in scores},
+            "folds": {s: results[f"test_{s}"].tolist() for s in scores},
         }
-    ]
-
-    scenario_results = []
-    for sc in scenarios:
-        row_df = pd.DataFrame([sc["data"]])
-        prob = float(rf_pipeline.predict_proba(row_df)[0][1])
-        label = "HOT_LEAD" if prob >= 0.8 else ("WARM_LEAD" if prob >= 0.5 else "COLD_LEAD")
-        print(f"  - {sc['name']}")
-        print(f"    --> Xac suat: {prob * 100:.1f}% | Phan loai: {label}")
-        scenario_results.append({"name": sc["name"], "prob": prob, "label": label})
-
-    # 7. Save the retrained model to lead_scoring_v2_rf_pipeline.pkl
-    joblib.dump(rf_pipeline, OUTPUT_MODEL_PATH)
-    print(f"\n[OK] Successfully saved retrained RF model to: {OUTPUT_MODEL_PATH}")
-
-    # 8. Export comparison JSON for reporting
-    comparison = {
-        "dataset_real_records": len(real_df),
-        "cv_summary": cv_summary,
-        "real_model_test_metrics": real_eval,
-        "synthetic_baseline_metrics": synthetic_eval,
-        "scenario_results": scenario_results,
+        print(candidates[name]["mean"], flush=True)
+    selected = select_candidate(candidates)
+    active = CANDIDATES[selected]
+    print(f"Selected by training CV: {selected}", flush=True)
+    intake = build_rf_pipeline(CORE_FEATURES).fit(X_train, y_train)
+    engaged = build_rf_pipeline(active).fit(X_train, y_train)
+    baseline = DummyClassifier(strategy="prior").fit(X_train, y_train)
+    metadata = {
+        "model_version": MODEL_VERSION, "selected_candidate": selected,
+        "active_features": active, "engineered_features": FEATURES,
+        "observed_categories": {name: sorted(X_train[name].unique().tolist()) for name in active},
+        "proxy_features": [f for f in active if f == "Engagement_Group"],
+        "stage_features": {"initial": CORE_FEATURES, "post_contact": active},
+        "source": "X Education public dataset", "crm_validated": False,
+        "raw_data_sha256": hashlib.sha256(RAW_DATA_PATH.read_bytes()).hexdigest(),
+        "split": {"random_state": 42, "test_size": 0.2, "stratified": True,
+                  "train_records": len(X_train), "test_records": len(X_test)},
     }
-    with open(RESULT_JSON_PATH, "w", encoding="utf-8") as f:
-        json.dump(comparison, f, indent=2, ensure_ascii=False)
-    print(f"[*] Exported comparison report to: {RESULT_JSON_PATH}")
+    intake.lead_metadata_ = {**metadata, "active_features": CORE_FEATURES, "training_stage": "initial", "proxy_features": []}
+    engaged.lead_metadata_ = {**metadata, "training_stage": "post_contact"}
+    pipeline = StagedLeadModel(intake, engaged, metadata)
+    probabilities = pipeline.predict_proba(X_test)[:, 1]
+    metrics = evaluate_probabilities(y_test, probabilities)
+    pipeline.lead_metadata_ = metadata
+    report = {
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "dataset_real_records": len(data), "metadata": metadata,
+        "candidate_cv": candidates, "cv_summary": candidates[selected]["mean"],
+        "real_model_test_metrics": metrics,
+        "stage_test_metrics": {"initial": evaluate_model(intake, X_test, y_test),
+                               "post_contact": evaluate_model(engaged, X_test, y_test),
+                               "routed_response_proxy": metrics},
+        "same_test_prior_baseline_metrics": evaluate_model(baseline, X_test, y_test),
+        "threshold_analysis": {str(t): evaluate_probabilities(y_test, probabilities, t)
+                               for t in [0.3, 0.5, 0.8]},
+        "limitations": [
+            "Public-domain accuracy and probability calibration do not establish CRM performance.",
+            "The initial model uses profile information only; call counts and TotalVisits are excluded.",
+            "After contact, public response categories remain approximate; missing results retain the profile-only model.",
+            "Source motivation contains career/unknown only; academic/personal goals lack source examples.",
+            "Last activities lack timestamps; pre-outcome availability remains unverified despite excluding Tags.",
+            "No conversion timestamps or outcome horizon exist, so temporal validation is unavailable.",
+            "Coarse profiles repeat across splits; unique source lead IDs were checked before splitting.",
+        ],
+    }
+    data.to_csv(REAL_DATASET_PATH, index=False)
+    model_tmp = OUTPUT_MODEL_PATH.with_suffix(".tmp")
+    joblib.dump(pipeline, model_tmp)
+    os.replace(model_tmp, OUTPUT_MODEL_PATH)
+    report["model_sha256"] = hashlib.sha256(OUTPUT_MODEL_PATH.read_bytes()).hexdigest()
+    report["mapped_data_sha256"] = hashlib.sha256(REAL_DATASET_PATH.read_bytes()).hexdigest()
+    RESULT_JSON_PATH.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    write_markdown(report)
+    print("Held-out test:", metrics, flush=True)
+    print(f"Saved model and report: {REPORT_PATH}", flush=True)
 
 
 if __name__ == "__main__":
