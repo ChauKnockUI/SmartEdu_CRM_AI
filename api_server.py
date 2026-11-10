@@ -1,24 +1,7 @@
-"""
-api_server.py
---------------
-SmartEdu CRM — AI Prediction Microservice
+"""FastAPI inference for lead scoring and dropout risk.
 
-Exposes three REST API endpoints powered by trained sklearn pipelines:
-
-    GET  /                  — Health check, lists available endpoints
-    POST /predict-lead      — Lead conversion probability v1 (Kaggle features)
-    POST /predict-lead-v2   — Lead conversion probability v2 (CRM features)
-    POST /predict-dropout   — Student dropout risk (early warning system)
-
-Models are loaded once at server startup and reused across all requests.
-
-Run:
-    uvicorn api_server:app --reload
-    uvicorn api_server:app --host 0.0.0.0 --port 8000
-
-Interactive docs:
-    http://127.0.0.1:8000/docs      (Swagger UI)
-    http://127.0.0.1:8000/redoc     (ReDoc)
+Run: uvicorn api_server:app --host 0.0.0.0 --port 8000
+Lead CRM endpoints: /predict-lead-v2 and /explain-lead-v2.
 """
 
 import os
@@ -31,67 +14,46 @@ from typing import Literal, Optional
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-# Thêm logic Explainable AI
-try:
-    from ai_models.explain_lead_scoring import get_lead_explanation_json
-    HAS_EXPLAINER = True
-except ImportError:
-    HAS_EXPLAINER = False
-
-
-# Make ai_models importable so joblib can unpickle v2 model pipelines
-# (they reference preprocessing_utils.log_transform_days)
+# Resolve serialized feature functions when loading model artifacts.
 _ai_models_dir = os.path.join(os.path.dirname(__file__), "ai_models")
 if _ai_models_dir not in sys.path:
     sys.path.insert(0, _ai_models_dir)
-try:
-    from preprocessing_utils import log_transform_days  # noqa: F401
-except ImportError:
-    pass  # Model v2 won't load, but v1 and dropout will still work
+from lead_contract import MODEL_VERSION, CRM_MODEL_VERSION, get_lead_prediction_json
+from ai_models.explain_lead_scoring import get_lead_explanation_json
 
-
-# ---------------------------------------------------------------------------
 # Logging
-# ---------------------------------------------------------------------------
 logging.basicConfig(
     level  = logging.INFO,
     format = "%(asctime)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
 # App instance
-# ---------------------------------------------------------------------------
 app = FastAPI(
     title       = "SmartEdu CRM — AI Service",
     description = (
         "Microservice providing AI-powered predictions for the SmartEdu CRM system.\n\n"
         "**Available models:**\n"
-        "- **Lead Scoring** — predicts likelihood of a lead converting to a paying student\n"
+        "- **Lead Scoring** — estimates the likelihood of a lead becoming a student\n"
         "- **Dropout Risk** — early warning system detecting students at risk of dropping out"
     ),
     version = "3.0.0",
 )
 
-# ---------------------------------------------------------------------------
 # Global model registry
 # Populated once at startup; all prediction handlers read from here.
-# ---------------------------------------------------------------------------
 _models: dict = {
     "lead_scoring"    : None,
-    "lead_scoring_v2" : None,   # v2 model (CRM business features)
+    "lead_scoring_v2" : None,
     "dropout_risk"    : None,
     "dropout_academic_fallback": None,
     "dropout_risk_version": "none",
 }
 
-
-# ---------------------------------------------------------------------------
 # Startup: load all trained model pipelines
-# ---------------------------------------------------------------------------
 @app.on_event("startup")
 def _load_models() -> None:
-    """Load all .pkl model files into memory when the server starts."""
+    """Load serving artifacts and reject incompatible or unapproved lead models."""
     base = os.path.dirname(__file__)
 
     # Lead Scoring model
@@ -102,17 +64,31 @@ def _load_models() -> None:
     else:
         logger.warning(f"Lead Scoring model not found: {lead_path}")
 
-    # Lead Scoring v2 model (CRM business-aligned features)
-    # Tries Random Forest first (supported by SHAP without JSON parsing bug), falls back to XGBoost
-    lead_v2_xgb_path = os.path.join(base, "ai_models", "lead_scoring_v2_xgb_pipeline.pkl")
-    lead_v2_rf_path  = os.path.join(base, "ai_models", "lead_scoring_v2_rf_pipeline.pkl")
-    if os.path.exists(lead_v2_rf_path):
-        _models["lead_scoring_v2"] = joblib.load(lead_v2_rf_path)
-        logger.info("Lead Scoring v2 (Random Forest) model loaded.")
-    elif os.path.exists(lead_v2_xgb_path):
-        _models["lead_scoring_v2"] = joblib.load(lead_v2_xgb_path)
-        logger.info("Lead Scoring v2 (XGBoost) model loaded.")
-    else:
+    # Do not silently substitute an old synthetic artifact or a different feature contract.
+    _models["lead_scoring_v2"] = None
+    for filename, version in [("lead_scoring_v2_rf_pipeline.pkl", MODEL_VERSION),
+                              ("lead_scoring_crm_pipeline.pkl", CRM_MODEL_VERSION)]:
+        path = os.path.join(base, "ai_models", filename)
+        if not os.path.exists(path):
+            continue
+        try:
+            model = joblib.load(path)
+            metadata = getattr(model, "lead_metadata_", {})
+            if metadata.get("model_version") != version:
+                raise ValueError("Lead model contract is outdated; run train_real_lead_scoring_rf.py")
+            if version == CRM_MODEL_VERSION and (metadata.get("outcome_window_days") != 30 or not metadata.get("temporal_validated") or not metadata.get("approved_for_serving") or metadata.get("training_stage") != "post_contact"):
+                raise ValueError("CRM artifact must be validated for post-contact scoring with a 30-day horizon")
+            if version == MODEL_VERSION:
+                if not hasattr(model, "select_pipeline"):
+                    raise ValueError("Lead model must support initial and post-contact scoring")
+                _models["lead_scoring_v2"] = model
+            elif _models["lead_scoring_v2"] is not None:
+                # The CRM history model is used after actual contact only.
+                _models["lead_scoring_v2"].crm_model_ = model
+            logger.info("Lead model %s loaded.", version)
+        except Exception:
+            logger.exception("Cannot load lead artifact %s", filename)
+    if _models["lead_scoring_v2"] is None:
         logger.warning("Lead Scoring v2 model not found.")
 
     # Finance is the primary model; use the academic model only for unknown tuition.
@@ -127,10 +103,7 @@ def _load_models() -> None:
             logger.exception("Cannot load dropout %s bundle", variant)
     _models["dropout_risk_version"] = MODEL_VERSIONS["uci_academic_finance"] if _models["dropout_risk"] else "none"
 
-
-# ---------------------------------------------------------------------------
 # Input schemas (Pydantic models for request body validation)
-# ---------------------------------------------------------------------------
 
 class LeadFeatures(BaseModel):
     """
@@ -151,8 +124,8 @@ class LeadFeaturesV2(BaseModel):
     """
     Input features for Lead Scoring v2 prediction.
 
-    Designed around CRM business logic — all features are either captured at
-    lead intake or automatically computed by the CRM backend.
+    Compatible CRM input. The model groups source, occupation, goal, engagement
+    and interaction count; course and lead age are accepted but not used.
 
     Bối cảnh nghiệp vụ:
     - Lead_Source             : Kênh marketing dẫn khách đến
@@ -170,14 +143,17 @@ class LeadFeaturesV2(BaseModel):
     Study_Purpose          : str   = Field(..., example="study_abroad",
                                            description="Learning goal: pass_exam, study_abroad, career_advancement, hobby, company_training")
     Course_Interested      : str   = Field(..., example="ielts",
-                                           description="Target course: communication_english, ielts, toeic, frontend, backend_nodejs, data_analysis, kids_english")
+                                           description="Compatibility field; not used by the aligned model")
     Call_Attempt_Count     : int   = Field(..., ge=0, example=2,
                                            description="Number of contact attempts by Sales (auto-tracked by CRM)")
     Last_Engagement_Status : str   = Field(..., example="positive_interaction",
                                            description="Latest interaction result: not_answering, busy_call_back, interested_need_time, positive_interaction, wrong_number, rejected")
     Days_Since_Created     : int   = Field(..., ge=0, example=3,
-                                           description="Days since lead was created in CRM (auto-computed)")
-
+                                           description="Compatibility field; not used by the aligned model")
+    Answered_Call_Count: Optional[int] = Field(None, ge=0)
+    Has_Contact_Activity: Optional[bool] = Field(None, description="Actual call/email/SMS/meeting exists; notes are excluded")
+    Activity_Count_7d: Optional[int] = Field(None, ge=0)
+    Days_Since_Last_Activity: Optional[int] = Field(None, ge=0)
 
 class DropoutFeatures(BaseModel):
     """CRM snapshot; unknown tuition selects the academic-only fallback."""
@@ -190,10 +166,7 @@ class DropoutFeatures(BaseModel):
     class Config:
         extra = "forbid"
 
-
-# ---------------------------------------------------------------------------
 # Endpoints
-# ---------------------------------------------------------------------------
 
 @app.get("/", tags=["System"])
 def health_check():
@@ -205,16 +178,17 @@ def health_check():
         "service" : "SmartEdu_CRM_AI_Service",
         "version" : "3.0.0",
         "status"  : "healthy",
-        "models_loaded": {k: (v is not None) for k, v in _models.items()},
+        "models_loaded": {k: (v is not None) for k, v in _models.items() if k != "dropout_risk_version"},
+        "lead_model_version": getattr(_models["lead_scoring_v2"], "lead_metadata_", {}).get("model_version"),
         "endpoints": [
             {"path": "/predict-lead",    "method": "POST", "description": "Lead scoring v1 (Kaggle features)"},
             {"path": "/predict-lead-v2", "method": "POST", "description": "Lead scoring v2 (CRM business features)"},
+            {"path": "/explain-lead-v2", "method": "POST", "description": "Same score with optional forest explanation"},
             {"path": "/predict-dropout", "method": "POST", "description": "Student dropout early warning"},
         ],
     }
 
-
-@app.post("/predict-lead", tags=["Lead Scoring v1"])
+@app.post("/predict-lead", deprecated=True, tags=["Lead Scoring v1"])
 def predict_lead(features: LeadFeatures):
     """
     Predict the probability that a prospective student (lead) will convert
@@ -228,7 +202,7 @@ def predict_lead(features: LeadFeatures):
     if _models["lead_scoring"] is None:
         raise HTTPException(
             status_code = 503,
-            detail      = "Lead Scoring model is not loaded. Run train_lead_scoring.py first.",
+            detail      = "Legacy lead model is not loaded. Use /predict-lead-v2 or /explain-lead-v2.",
         )
 
     try:
@@ -263,15 +237,14 @@ def predict_lead(features: LeadFeatures):
         logger.error(f"Lead scoring prediction error: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
-
 @app.post("/predict-lead-v2", tags=["Lead Scoring v2"])
 def predict_lead_v2(features: LeadFeaturesV2):
     """
     **Lead Scoring v2** — Predict conversion probability using CRM business features.
 
-    This endpoint uses the new 7-feature model designed around actual CRM workflow:
-    - 4 features from lead intake form (Lead_Source, Occupation, Study_Purpose, Course)
-    - 3 features auto-computed by CRM (Call_Attempt_Count, Last_Engagement, Days_Since_Created)
+    The compatible CRM request is transformed into broad source, occupation,
+    goal, engagement and interaction-volume groups. Active features are returned
+    with the score. Course choice and lead age are not used by this model.
 
     Returns a probability score and a sales action label:
     - **HOT_LEAD**  (>= 80%) — high priority, follow up immediately
@@ -281,82 +254,29 @@ def predict_lead_v2(features: LeadFeaturesV2):
     if _models["lead_scoring_v2"] is None:
         raise HTTPException(
             status_code = 503,
-            detail      = "Lead Scoring v2 model is not loaded. Run train_lead_scoring_v2.py first.",
+            detail      = "Lead Scoring model is not loaded. Run train_real_lead_scoring_rf.py first.",
         )
 
     try:
-        input_df = pd.DataFrame([{
-            "Lead_Source"            : features.Lead_Source,
-            "Occupation"             : features.Occupation,
-            "Study_Purpose"          : features.Study_Purpose,
-            "Course_Interested"      : features.Course_Interested,
-            "Call_Attempt_Count"     : features.Call_Attempt_Count,
-            "Last_Engagement_Status" : features.Last_Engagement_Status,
-            "Days_Since_Created"     : features.Days_Since_Created,
-        }])
-
-        prediction  = int(_models["lead_scoring_v2"].predict(input_df)[0])
-        probability = float(_models["lead_scoring_v2"].predict_proba(input_df)[0][1])
-
-        if probability >= 0.8:
-            label  = "HOT_LEAD"
-            action = "High priority — follow up within 1 hour. Prepare pricing & schedule."
-        elif probability >= 0.5:
-            label  = "WARM_LEAD"
-            action = "Moderate interest — send course brochure, schedule a callback."
-        else:
-            label  = "COLD_LEAD"
-            action = "Low intent — add to nurture email sequence, revisit in 7 days."
-
-        return {
-            "model_version"    : "v2",
-            "prediction"       : "Converted" if prediction == 1 else "Not Converted",
-            "probability_score": round(probability * 100, 2),
-            "recommendation"   : label,
-            "action"           : action,
-        }
+        return get_lead_prediction_json(_models["lead_scoring_v2"], features.model_dump())
 
     except Exception as e:
-        logger.error(f"Lead scoring v2 prediction error: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
-
+        logger.exception("Lead scoring prediction failed")
+        raise HTTPException(status_code=503, detail="Lead scoring is temporarily unavailable") from e
 
 @app.post("/explain-lead-v2", tags=["Lead Scoring v2"])
 def explain_lead_v2(features: LeadFeaturesV2):
     """
     Predict AND EXPLAIN the probability that a lead will convert into a paying student.
     
-    Returns the classification, probability score, and an NLP-friendly
-    SHAP explanation breaking down EXACTLY why the AI made this decision.
-    Specifically designed to be rendered directly onto the CRM interface for Sales Teams.
+    Returns the same prediction as /predict-lead-v2, plus optional SHAP factors.
+    Factors describe the forest ensemble before calibration. Missing or failed
+    SHAP does not disable predictions.
     """
-    if _models["lead_scoring_v2"] is None:
-        raise HTTPException(
-            status_code = 503,
-            detail      = "Lead Scoring v2 model is not loaded. Run train_lead_scoring_v2.py first.",
-        )
-        
-    if not HAS_EXPLAINER:
-        raise HTTPException(
-            status_code = 503,
-            detail      = "Explainable AI module not loaded. Missing dependencies like 'shap'.",
-        )
-
-    try:
-        # Convert schema to dict matching training data columns
-        input_dict = features.dict()
-        
-        # Gọi hàm Explain từ ai_models
-        response_json = get_lead_explanation_json(_models["lead_scoring_v2"], input_dict)
-        return response_json
-
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        logger.error(f"Lead scoring v2 explanation error: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
-
-
+    prediction = predict_lead_v2(features)
+    return get_lead_explanation_json(
+        _models["lead_scoring_v2"], features.model_dump(), prediction=prediction,
+    )
 
 @app.post("/predict-dropout", tags=["Early Warning"])
 def predict_dropout(features: DropoutFeatures):

@@ -111,6 +111,3 @@ def oof_probs(pipe, X, y, groups, sources=None):
     splits = make_cv_splits(X, y, groups, sources)
     return cross_val_predict(pipe, X, y, cv=splits,
                              method="predict_proba", n_jobs=1)[:, 1]
-
-
-

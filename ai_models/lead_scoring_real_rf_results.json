@@ -1,0 +1,365 @@
+{
+  "created_at": "2026-11-10T09:11:10.042046+00:00",
+  "dataset_real_records": 9240,
+  "metadata": {
+    "model_version": "lead_staged_rf_3",
+    "selected_candidate": "with_engagement",
+    "active_features": [
+      "Source_Group",
+      "Occupation_Group",
+      "Goal_Group",
+      "Engagement_Group"
+    ],
+    "engineered_features": [
+      "Source_Group",
+      "Occupation_Group",
+      "Goal_Group",
+      "Engagement_Group"
+    ],
+    "observed_categories": {
+      "Source_Group": [
+        "other",
+        "referral",
+        "search",
+        "social",
+        "unknown",
+        "website"
+      ],
+      "Occupation_Group": [
+        "other",
+        "student",
+        "unemployed",
+        "unknown",
+        "working"
+      ],
+      "Goal_Group": [
+        "career",
+        "unknown"
+      ],
+      "Engagement_Group": [
+        "active",
+        "unknown",
+        "unreachable"
+      ]
+    },
+    "proxy_features": [
+      "Engagement_Group"
+    ],
+    "stage_features": {
+      "initial": [
+        "Source_Group",
+        "Occupation_Group",
+        "Goal_Group"
+      ],
+      "post_contact": [
+        "Source_Group",
+        "Occupation_Group",
+        "Goal_Group",
+        "Engagement_Group"
+      ]
+    },
+    "source": "X Education public dataset",
+    "crm_validated": false,
+    "raw_data_sha256": "1426dffd94246b8c7f08d1080d9c04115a0c4b67eadcba1ed9d2fa10d3762802",
+    "split": {
+      "random_state": 42,
+      "test_size": 0.2,
+      "stratified": true,
+      "train_records": 7392,
+      "test_records": 1848
+    }
+  },
+  "candidate_cv": {
+    "intake": {
+      "features": [
+        "Source_Group",
+        "Occupation_Group",
+        "Goal_Group"
+      ],
+      "mean": {
+        "accuracy": 0.7293005093409675,
+        "f1": 0.4827143554213763,
+        "roc_auc": 0.7606235143331262,
+        "precision": 0.9159618747909304,
+        "recall": 0.32783337958252395
+      },
+      "std": {
+        "accuracy": 0.005538469765170101,
+        "f1": 0.013642235291665595,
+        "roc_auc": 0.007177168727738308,
+        "precision": 0.01999894231131408,
+        "recall": 0.01173510054575688
+      },
+      "folds": {
+        "accuracy": [
+          0.7329276538201488,
+          0.7363083164300203,
+          0.7212449255751014,
+          0.7313937753721245,
+          0.7246278755074425
+        ],
+        "f1": [
+          0.4968152866242038,
+          0.4935064935064935,
+          0.45931758530183725,
+          0.48774193548387096,
+          0.47619047619047616
+        ],
+        "roc_auc": [
+          0.7678208171694362,
+          0.7701628934823308,
+          0.7568021099003014,
+          0.7570600510085788,
+          0.7512717001049841
+        ],
+        "precision": [
+          0.9069767441860465,
+          0.95,
+          0.9114583333333334,
+          0.9219512195121952,
+          0.8894230769230769
+        ],
+        "recall": [
+          0.34210526315789475,
+          0.3333333333333333,
+          0.30701754385964913,
+          0.33157894736842103,
+          0.3251318101933216
+        ]
+      }
+    },
+    "with_engagement": {
+      "features": [
+        "Source_Group",
+        "Occupation_Group",
+        "Goal_Group",
+        "Engagement_Group"
+      ],
+      "mean": {
+        "accuracy": 0.7329518079454262,
+        "f1": 0.5678453094932885,
+        "roc_auc": 0.7908648277225236,
+        "precision": 0.7537656887118237,
+        "recall": 0.455941171029507
+      },
+      "std": {
+        "accuracy": 0.00894573084297507,
+        "f1": 0.021872275873972183,
+        "roc_auc": 0.007079346014215899,
+        "precision": 0.011331370527547648,
+        "recall": 0.025796239944757132
+      },
+      "folds": {
+        "accuracy": [
+          0.7417173766058147,
+          0.744421906693712,
+          0.7246278755074425,
+          0.7320703653585927,
+          0.7219215155615697
+        ],
+        "f1": [
+          0.5847826086956521,
+          0.5970149253731343,
+          0.5411499436302142,
+          0.5714285714285714,
+          0.5448504983388704
+        ],
+        "roc_auc": [
+          0.7914654623357074,
+          0.797374211105321,
+          0.7910503130071875,
+          0.7967356441765205,
+          0.7776985079878813
+        ],
+        "precision": [
+          0.7685714285714286,
+          0.7608695652173914,
+          0.7570977917981072,
+          0.7457627118644068,
+          0.7365269461077845
+        ],
+        "recall": [
+          0.47192982456140353,
+          0.49122807017543857,
+          0.42105263157894735,
+          0.4631578947368421,
+          0.43233743409490333
+        ]
+      }
+    }
+  },
+  "cv_summary": {
+    "accuracy": 0.7329518079454262,
+    "f1": 0.5678453094932885,
+    "roc_auc": 0.7908648277225236,
+    "precision": 0.7537656887118237,
+    "recall": 0.455941171029507
+  },
+  "real_model_test_metrics": {
+    "accuracy": 0.7153679653679653,
+    "f1_score": 0.4497907949790795,
+    "roc_auc": 0.7648912258664345,
+    "pr_auc": 0.6773647304564261,
+    "precision": 0.8811475409836066,
+    "recall": 0.30196629213483145,
+    "brier_score": 0.18606301003363593,
+    "confusion_matrix": [
+      [
+        1107,
+        29
+      ],
+      [
+        497,
+        215
+      ]
+    ]
+  },
+  "stage_test_metrics": {
+    "initial": {
+      "accuracy": 0.7164502164502164,
+      "f1_score": 0.453027139874739,
+      "roc_auc": 0.7426894583794905,
+      "pr_auc": 0.6357253149897172,
+      "precision": 0.8821138211382114,
+      "recall": 0.3047752808988764,
+      "brier_score": 0.18745960523209776,
+      "confusion_matrix": [
+        [
+          1107,
+          29
+        ],
+        [
+          495,
+          217
+        ]
+      ]
+    },
+    "post_contact": {
+      "accuracy": 0.7234848484848485,
+      "f1_score": 0.5481874447391689,
+      "roc_auc": 0.7685458785013451,
+      "pr_auc": 0.6804047375986819,
+      "precision": 0.7398568019093079,
+      "recall": 0.4353932584269663,
+      "brier_score": 0.18136695772322747,
+      "confusion_matrix": [
+        [
+          1027,
+          109
+        ],
+        [
+          402,
+          310
+        ]
+      ]
+    },
+    "routed_response_proxy": {
+      "accuracy": 0.7153679653679653,
+      "f1_score": 0.4497907949790795,
+      "roc_auc": 0.7648912258664345,
+      "pr_auc": 0.6773647304564261,
+      "precision": 0.8811475409836066,
+      "recall": 0.30196629213483145,
+      "brier_score": 0.18606301003363593,
+      "confusion_matrix": [
+        [
+          1107,
+          29
+        ],
+        [
+          497,
+          215
+        ]
+      ]
+    }
+  },
+  "same_test_prior_baseline_metrics": {
+    "accuracy": 0.6147186147186147,
+    "f1_score": 0.0,
+    "roc_auc": 0.5,
+    "pr_auc": 0.3852813852813853,
+    "precision": 0.0,
+    "recall": 0.0,
+    "brier_score": 0.23683965773809523,
+    "confusion_matrix": [
+      [
+        1136,
+        0
+      ],
+      [
+        712,
+        0
+      ]
+    ]
+  },
+  "threshold_analysis": {
+    "0.3": {
+      "accuracy": 0.6158008658008658,
+      "f1_score": 0.6309771309771309,
+      "roc_auc": 0.7648912258664345,
+      "pr_auc": 0.6773647304564261,
+      "precision": 0.5008250825082509,
+      "recall": 0.8525280898876404,
+      "brier_score": 0.18606301003363593,
+      "confusion_matrix": [
+        [
+          531,
+          605
+        ],
+        [
+          105,
+          607
+        ]
+      ]
+    },
+    "0.5": {
+      "accuracy": 0.7153679653679653,
+      "f1_score": 0.4497907949790795,
+      "roc_auc": 0.7648912258664345,
+      "pr_auc": 0.6773647304564261,
+      "precision": 0.8811475409836066,
+      "recall": 0.30196629213483145,
+      "brier_score": 0.18606301003363593,
+      "confusion_matrix": [
+        [
+          1107,
+          29
+        ],
+        [
+          497,
+          215
+        ]
+      ]
+    },
+    "0.8": {
+      "accuracy": 0.7104978354978355,
+      "f1_score": 0.4350580781414995,
+      "roc_auc": 0.7648912258664345,
+      "pr_auc": 0.6773647304564261,
+      "precision": 0.8765957446808511,
+      "recall": 0.2893258426966292,
+      "brier_score": 0.18606301003363593,
+      "confusion_matrix": [
+        [
+          1107,
+          29
+        ],
+        [
+          506,
+          206
+        ]
+      ]
+    }
+  },
+  "limitations": [
+    "Public-domain accuracy and probability calibration do not establish CRM performance.",
+    "The initial model uses profile information only; call counts and TotalVisits are excluded.",
+    "After contact, public response categories remain approximate; missing results retain the profile-only model.",
+    "Source motivation contains career/unknown only; academic/personal goals lack source examples.",
+    "Last activities lack timestamps; pre-outcome availability remains unverified despite excluding Tags.",
+    "No conversion timestamps or outcome horizon exist, so temporal validation is unavailable.",
+    "Coarse profiles repeat across splits; unique source lead IDs were checked before splitting."
+  ],
+  "model_sha256": "c496442efaf750b531ae8678135f41b9413871abab913a29ae9099cc924c3d32",
+  "mapped_data_sha256": "41d3349f5755870837ef899456b6e58b8679ca0362caad23c344e0ef29ceb7a9"
+}

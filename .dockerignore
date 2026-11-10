@@ -21,3 +21,10 @@ coverage.xml
 .idea/
 .vscode/
 .DS_Store
+dataset/
+tests/
+docs/
+ai_models/reports/
+*.png
+.env
+.env.*

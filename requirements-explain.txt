@@ -1,0 +1,3 @@
+-r requirements.txt
+# Optional locally: predictions also work without SHAP.
+shap==0.46.0
